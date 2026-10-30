@@ -23,7 +23,7 @@ insert into public.categories (name, emoji, kind, is_fixed, sort_order) values
   ('Cultura',              '🎭', 'expense',    false, 16),
   ('Altro',                '📦', 'expense',    false, 17),
   ('Tecnologia',           '💻', 'expense',    false, 18),
-  ('Affitto',              '🏠', 'expense',    true,  19)
+  ('Affitto',              '🔑', 'expense',    true,  19)
 on conflict (name) do nothing;
 
 insert into public.accounts (name) values ('ING') on conflict (name) do nothing;
@@ -41,9 +41,11 @@ insert into public.accounts (name) values ('ING') on conflict (name) do nothing;
 --   nota contiene "valore iniziale"                → opening_balance (escluso da E/U)
 --   "Importo per pivot E/U" > 0                    → income (anche in Altro);
 --                                                    se Altro + nota "Stipendio" → categoria Stipendio
---   categoria Investimenti                         → investment
---   Altro + nota "Investimenti", oppure Altro senza nota da 200 € (versamento mensile)
---                                                  → investment, spostato in Investimenti
+--   Investimenti › Tasse                           → expense (costo, non risparmio)
+--   categoria Investimenti, o Altro + nota "Investimenti"
+--                                                  → investment (spostato in Investimenti)
+--   Altro senza nota da 200 €, se nel mese non c'è già un investimento
+--                                                  → investment (versamento mensile, uno al mese)
 --   tutto il resto                                 → expense
 --
 -- Le righe già presenti vengono aggiornate solo se sono cambiate nel foglio e
@@ -130,13 +132,25 @@ begin
       type = case
         when i.note ilike '%valore iniziale%' then 'opening_balance'
         when i.pivot > 0 then 'income'
+        when c.kind = 'investment' and i.sub_name = 'Tasse' then 'expense'
         when c.kind = 'investment' then 'investment'
-        when c.name = 'Altro' and (i.note ilike '%investiment%' or (i.note is null and i.amount_cents = 20000))
-          then 'investment'
+        when c.name = 'Altro' and i.note ilike '%investiment%' then 'investment'
         else 'expense'
       end::public.txn_type
   from public.categories c
   where c.name = substring(i.category_label from '^\S+\s+(.*)$');
+
+  -- Versamento mensile registrato in Altro senza nota: è un investimento solo se
+  -- nel mese non ce n'è già uno esplicito.
+  update _import_rows i set type = 'investment'
+  from public.categories c
+  where c.id = i.category_id and c.name = 'Altro' and i.type = 'expense'
+    and i.note is null and i.amount_cents = 20000
+    and not exists (
+      select 1 from _import_rows o
+      where o.type = 'investment'
+        and date_trunc('month', o.occurred_on) = date_trunc('month', i.occurred_on)
+    );
 
   -- Gli investimenti registrati in Altro passano alla categoria Investimenti.
   update _import_rows set category_id = v_invest_id, sub_name = 'Versamento'
@@ -223,7 +237,7 @@ select
   date_trunc('month', t.occurred_on)::date                                         as month,
   coalesce(sum(t.amount_cents) filter (where t.type = 'income'), 0)::bigint        as income_cents,
   coalesce(sum(t.amount_cents) filter (where t.type = 'expense'), 0)::bigint       as expense_cents,
-  coalesce(sum(t.amount_cents) filter (where t.type = 'expense' and c.is_fixed), 0)::bigint as fixed_expense_cents,
+  coalesce(sum(t.amount_cents) filter (where t.type = 'expense' and c.is_fixed and c.kind = 'expense'), 0)::bigint as fixed_expense_cents,
   coalesce(sum(t.amount_cents) filter (where t.type = 'investment'), 0)::bigint    as investment_cents,
   count(*)::int                                                                     as txn_count
 from public.transactions t

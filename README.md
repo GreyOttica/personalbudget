@@ -61,9 +61,10 @@ dal foglio sono solo segnalate. Le righe eliminate dall'app non vengono ripristi
 | "Importo per pivot E/U" vuoto (riga senza segno) | ignorata, non importata (come nel foglio EU) |
 | Nota contiene "valore iniziale" | saldo iniziale, escluso da entrate e uscite |
 | "Importo per pivot E/U" positivo (anche in Altro) | entrata; se è in 📦 Altro con nota "Stipendio" passa a 💼 Stipendio |
-| Categoria 📈 Investimenti | investimento (risparmio) |
-| 📦 Altro con nota "Investimenti", oppure 📦 Altro senza nota da 200 € | investimento, spostato in 📈 Investimenti › Versamento |
+| 📈 Investimenti › Tasse | spesa (costo degli investimenti, non risparmio) |
+| Categoria 📈 Investimenti, oppure 📦 Altro con nota "Investimenti" | investimento (risparmio), spostato in 📈 Investimenti |
+| 📦 Altro senza nota da 200 €, se nel mese non c'è già un investimento | investimento (versamento mensile, uno al mese) |
 | Tutto il resto | spesa |
 
 Importi ricorrenti (non proiettati linearmente nella stima di fine mese, si usa l'importo del mese precedente):
-🏠 Affitto (900 €), 📈 Investimenti (200 €), 🔁 Abbonamenti.
+🔑 Affitto (900 €), 📈 Investimenti (200 €), 🔁 Abbonamenti (SIM, 7 €).

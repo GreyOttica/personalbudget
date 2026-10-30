@@ -44,7 +44,7 @@ type MonthTotals = {
 const FIXED = new Set(["Affitto", "Abbonamenti"]);
 const INVESTMENT_CATEGORY = "Investimenti";
 const SALARY_CATEGORY = "Stipendio";
-// Versamento mensile in investimenti registrato in Altro senza nota.
+// Versamento mensile in investimenti (uno al mese) registrato in Altro senza nota.
 const MONTHLY_INVESTMENT_CENTS = 20_000;
 
 // --- utilità -------------------------------------------------------------------
@@ -67,8 +67,23 @@ function categoryName(label: string): string {
   return label.replace(/^\S+\s+/, "").trim();
 }
 
+function isInvestmentTax(r: SheetRow): boolean {
+  return categoryName(r.category) === INVESTMENT_CATEGORY && r.subcategory === "Tasse";
+}
+
+function isExplicitInvestment(r: SheetRow): boolean {
+  if (r.pivot === null || r.pivot > 0 || isInvestmentTax(r)) return false;
+  const cat = categoryName(r.category);
+  return cat === INVESTMENT_CATEGORY || (cat === "Altro" && (r.note ?? "").toLowerCase().includes("investiment"));
+}
+
+/** Mesi (YYYY-MM) che hanno già un investimento dichiarato in modo esplicito. */
+function monthsWithInvestment(rows: SheetRow[]): Set<string> {
+  return new Set(rows.filter(isExplicitInvestment).map((r) => r.date.slice(0, 7)));
+}
+
 // Stesse regole di public.import_sheet_rows: se ne cambi una, cambia anche l'altra.
-function classify(r: SheetRow): Classified {
+function classify(r: SheetRow, investedMonths: Set<string>): Classified {
   const note = (r.note ?? "").toLowerCase();
   const cat = categoryName(r.category);
   if (r.pivot === null) return { type: "skip", category: cat };
@@ -76,8 +91,14 @@ function classify(r: SheetRow): Classified {
   if (r.pivot > 0) {
     return { type: "income", category: cat === "Altro" && note.includes("stipendio") ? SALARY_CATEGORY : cat };
   }
-  if (cat === INVESTMENT_CATEGORY) return { type: "investment", category: cat };
-  if (cat === "Altro" && (note.includes("investiment") || (r.note === null && cents(r.amount) === MONTHLY_INVESTMENT_CENTS))) {
+  if (isInvestmentTax(r)) return { type: "expense", category: cat };
+  if (isExplicitInvestment(r)) return { type: "investment", category: INVESTMENT_CATEGORY };
+  if (
+    cat === "Altro" &&
+    r.note === null &&
+    cents(r.amount) === MONTHLY_INVESTMENT_CENTS &&
+    !investedMonths.has(r.date.slice(0, 7))
+  ) {
     return { type: "investment", category: INVESTMENT_CATEGORY };
   }
   return { type: "expense", category: cat };
@@ -169,6 +190,7 @@ function readEu(wb: Workbook): { income: number[]; expense: number[] } | null {
 // --- riepilogo locale -----------------------------------------------------------
 
 function summarize(rows: SheetRow[]): Map<string, MonthTotals> {
+  const invested = monthsWithInvestment(rows);
   const months = new Map<string, MonthTotals>();
   for (const r of rows) {
     const m = r.date.slice(0, 7);
@@ -177,7 +199,7 @@ function summarize(rows: SheetRow[]): Map<string, MonthTotals> {
     }
     const t = months.get(m)!;
     const amount = cents(r.amount);
-    const { type, category } = classify(r);
+    const { type, category } = classify(r, invested);
 
     if (r.pivot === null) t.unsigned += amount;
     else t.euByCategory.set(r.category, (t.euByCategory.get(r.category) ?? 0) + cents(r.pivot));
@@ -256,15 +278,19 @@ async function main() {
   }
 
   const months = summarize(rows);
-  const opening = rows.filter((r) => classify(r).type === "opening_balance");
+  const invested = monthsWithInvestment(rows);
+  const opening = rows.filter((r) => classify(r, invested).type === "opening_balance");
   const unsigned = rows.filter((r) => r.pivot === null);
   console.log(`\nFile: ${file}`);
   console.log(`Righe lette: ${rows.length}  (dal ${rows.map((r) => r.date).sort()[0]} al ${rows.map((r) => r.date).sort().at(-1)})`);
   console.log(`Saldo iniziale escluso: ${opening.map((r) => `${fmt(cents(r.amount))} (${r.date})`).join(", ") || "nessuno"}`);
   console.log(`Righe senza segno ignorate: ${unsigned.length} per ${fmt(unsigned.reduce((s, r) => s + cents(r.amount), 0))}`);
-  const moved = rows.filter((r) => categoryName(r.category) !== classify(r).category);
+  const moved = rows.filter((r) => categoryName(r.category) !== classify(r, invested).category);
   for (const r of moved) {
-    console.log(`Spostata in ${classify(r).category}: ${r.date} ${fmt(cents(r.amount))} ${r.note ?? "(senza nota)"}`);
+    console.log(`Spostata in ${classify(r, invested).category}: ${r.date} ${fmt(cents(r.amount))} ${r.note ?? "(senza nota)"}`);
+  }
+  for (const r of rows.filter(isInvestmentTax)) {
+    console.log(`Tassa sugli investimenti contata come spesa: ${r.date} ${fmt(cents(r.amount))}`);
   }
 
   // 1) Riepilogo mensile secondo le regole dell'app.
