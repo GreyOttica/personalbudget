@@ -6,7 +6,7 @@ import { addMonths, monthOf, type Dashboard } from "@/lib/analytics/dashboard";
 import { loadDashboard, parseMonth } from "@/lib/analytics/load";
 import { romeDate } from "@/lib/entry/amount";
 import { formatEuros, formatMonth, formatMonthName, formatPercent } from "@/lib/format";
-import { SubcategoryBreakdown, TrendCharts } from "./DashboardCharts";
+import { DailyFocus, SubcategoryBreakdown, TrendCharts } from "./DashboardCharts";
 
 export const metadata: Metadata = { title: "Home" };
 
@@ -56,6 +56,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
           <Hero d={d} monthName={monthName} />
           <Tiles d={d} />
           {d.alerts.length > 0 && <Alerts d={d} />}
+          <section className="section">
+            <div className="section-head">
+              <h2>Giorno per giorno</h2>
+            </div>
+            <DailyFocus daily={d.daily} isCurrentMonth={d.isCurrentMonth} />
+          </section>
           <CategoryBudgets d={d} />
           <section className="section">
             <div className="section-head">

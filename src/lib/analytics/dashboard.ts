@@ -61,6 +61,32 @@ export type SubcategoryRow = {
   count: number;
 };
 
+export type DayPoint = {
+  date: string; // YYYY-MM-DD
+  variable: number; // spese variabili del giorno
+  fixed: number; // spese fisse del giorno (affitto, abbonamenti)
+  count: number; // movimenti di spesa del giorno
+  cumulativeVariable: number | null; // null per i giorni futuri
+};
+
+export type Daily = {
+  days: DayPoint[];
+  /** tetto di spesa variabile del mese: budget delle categorie non fisse, altrimenti la media */
+  variableTarget: number;
+  variableTargetSource: "budget" | "average" | "none";
+  /** solo mese in corso */
+  today: {
+    date: string;
+    spent: number;
+    count: number;
+    averageDaily: number; // media giornaliera variabile degli ultimi mesi
+    /** quanto puoi spendere al giorno (variabile) da oggi a fine mese per restare nel tetto */
+    perDayLeft: number | null;
+  } | null;
+  /** media delle spese variabili per giorno della settimana (lun…dom), ultime 12 settimane */
+  weekdays: { weekday: number; label: string; average: number }[];
+};
+
 export type Dashboard = {
   month: string;
   isCurrentMonth: boolean;
@@ -74,6 +100,7 @@ export type Dashboard = {
   alerts: CategoryRow[];
   trend: MonthPoint[];
   subcategories: SubcategoryRow[];
+  daily: Daily;
 };
 
 export const WARNING_RATIO = 0.8;
@@ -82,6 +109,21 @@ const TREND_MONTHS = 12;
 // Peso, in giorni, della media storica nella stima delle spese variabili:
 // a inizio mese conta soprattutto la storia, verso fine mese il ritmo attuale.
 const PRIOR_DAYS = 7;
+const WEEKDAY_WEEKS = 12;
+
+const WEEKDAY_LABELS = ["lun", "mar", "mer", "gio", "ven", "sab", "dom"];
+
+/** "2026-10-05" + n giorni */
+export function addDays(isoDate: string, n: number): string {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** 0 = lunedì … 6 = domenica */
+export function weekdayOf(isoDate: string): number {
+  return (new Date(`${isoDate}T00:00:00Z`).getUTCDay() + 6) % 7;
+}
 
 // --- date -------------------------------------------------------------------------
 
@@ -255,6 +297,8 @@ export function buildDashboard(input: {
     subAgg.set(key, row);
   }
 
+  const daily = buildDaily({ txns, fixedCats, rows, month, today, day, daysInMonth, isCurrentMonth, avgOf, spentBy });
+
   const avgIncome = avgOf((m) => perMonth.get(m)?.income ?? 0);
   const avgExpense = avgOf((m) => perMonth.get(m)?.expense ?? 0);
 
@@ -289,5 +333,81 @@ export function buildDashboard(input: {
     alerts: rows.filter((r) => r.status === "warning" || r.status === "over"),
     trend,
     subcategories: [...subAgg.values()].sort((a, b) => b.amount - a.amount),
+    daily,
   };
+}
+
+// --- vista giornaliera -----------------------------------------------------------
+
+function buildDaily(a: {
+  txns: AnalyticsTxn[];
+  fixedCats: Set<string>;
+  rows: CategoryRow[];
+  month: string;
+  today: string;
+  day: number;
+  daysInMonth: number;
+  isCurrentMonth: boolean;
+  avgOf: (fn: (m: string) => number) => number;
+  spentBy: Map<string, number>;
+}): Daily {
+  const { txns, fixedCats, rows, month, today, day, daysInMonth, isCurrentMonth } = a;
+
+  const days: DayPoint[] = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    days.push({ date: `${month}-${String(d).padStart(2, "0")}`, variable: 0, fixed: 0, count: 0, cumulativeVariable: null });
+  }
+  for (const t of txns) {
+    if (t.type !== "expense" || monthOf(t.occurred_on) !== month) continue;
+    const p = days[Number(t.occurred_on.slice(8, 10)) - 1];
+    if (fixedCats.has(t.category_id)) p.fixed += t.amount_cents;
+    else p.variable += t.amount_cents;
+    p.count++;
+  }
+  let running = 0;
+  for (let i = 0; i < days.length; i++) {
+    running += days[i].variable;
+    if (i < day) days[i].cumulativeVariable = running;
+  }
+
+  // Tetto variabile: somma dei budget delle categorie non fisse; senza budget, la media mensile.
+  const budgeted = rows.filter((r) => !r.isFixed && r.budget !== null);
+  const averageVariable = rows.filter((r) => !r.isFixed).reduce((s, r) => s + r.average, 0);
+  const variableTarget = budgeted.length ? budgeted.reduce((s, r) => s + (r.budget ?? 0), 0) : averageVariable;
+  const variableTargetSource = budgeted.length ? "budget" : averageVariable > 0 ? "average" : "none";
+
+  let todayInfo: Daily["today"] = null;
+  if (isCurrentMonth) {
+    const p = days[day - 1];
+    const spentBefore = days.slice(0, day - 1).reduce((s, d) => s + d.variable, 0);
+    const daysLeft = daysInMonth - day + 1; // oggi compreso
+    todayInfo = {
+      date: today,
+      spent: p.variable + p.fixed,
+      count: p.count,
+      averageDaily: Math.round(averageVariable / daysInMonth),
+      perDayLeft: variableTargetSource === "none" ? null : Math.max(0, Math.round((variableTarget - spentBefore) / daysLeft)),
+    };
+  }
+
+  // Media per giorno della settimana: ultime 12 settimane fino a oggi (o a fine mese),
+  // divisa per quanti lunedì, martedì… ci sono davvero nel periodo coperto dai dati.
+  const end = isCurrentMonth ? today : `${month}-${String(daysInMonth).padStart(2, "0")}`;
+  const firstTxn = txns.reduce((min, t) => (t.occurred_on < min ? t.occurred_on : min), end);
+  const fromWindow = addDays(end, -WEEKDAY_WEEKS * 7 + 1);
+  const start = firstTxn > fromWindow ? firstTxn : fromWindow;
+  const sums = Array<number>(7).fill(0);
+  const occurrences = Array<number>(7).fill(0);
+  for (let d = start; d <= end; d = addDays(d, 1)) occurrences[weekdayOf(d)]++;
+  for (const t of txns) {
+    if (t.type !== "expense" || fixedCats.has(t.category_id) || t.occurred_on < start || t.occurred_on > end) continue;
+    sums[weekdayOf(t.occurred_on)] += t.amount_cents;
+  }
+  const weekdays = sums.map((sum, i) => ({
+    weekday: i,
+    label: WEEKDAY_LABELS[i],
+    average: occurrences[i] ? Math.round(sum / occurrences[i]) : 0,
+  }));
+
+  return { days, variableTarget, variableTargetSource, today: todayInfo, weekdays };
 }

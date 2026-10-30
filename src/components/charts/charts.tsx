@@ -89,6 +89,8 @@ type ChartProps = {
   height?: number;
   ariaLabel: string;
   tableCaption: string;
+  /** intestazione della prima colonna della tabella dei dati */
+  tableFirstColumn?: string;
 };
 
 /** Colonne raggruppate: una colonna per serie in ogni gruppo. */
@@ -134,9 +136,11 @@ export function ColumnChart(props: ChartProps) {
                 {series.map((s, j) => (
                   <path key={s.key} d={barPath(x0 + j * (barW + gap), y(0), y(p.values[s.key] ?? 0), barW)} fill={s.color} />
                 ))}
-                <text x={AXIS_W + i * band + band / 2} y={height - 6} className="tick" textAnchor="middle">
-                  {p.label}
-                </text>
+                {p.label && (
+                  <text x={AXIS_W + i * band + band / 2} y={height - 6} className="tick" textAnchor="middle">
+                    {p.label}
+                  </text>
+                )}
                 {/* area di tocco più grande delle barre */}
                 <rect
                   x={AXIS_W + i * band}
@@ -161,15 +165,17 @@ export function ColumnChart(props: ChartProps) {
   );
 }
 
-/** Linea con punti, per una sola serie (per esempio la percentuale di risparmio). */
+/**
+ * Linee, una per serie. Con pochi punti (mesi) ogni valore ha il suo punto; con
+ * tanti punti (giorni) solo l'ultimo valore della serie, per non affollare.
+ */
 export function LineChart(props: ChartProps) {
   const { points, series, formatTick, height = 170 } = props;
-  const s = series[0];
   const [ref, width] = useWidth<HTMLDivElement>();
   const [active, setActive] = useState<number | null>(null);
   useDismiss(ref, useCallback(() => setActive(null), []));
 
-  const vals = points.map((p) => p.values[s.key]).filter((v): v is number => v !== null);
+  const vals = points.flatMap((p) => series.map((s) => p.values[s.key])).filter((v): v is number => v !== null);
   const ticks = niceTicks(Math.min(...vals, 0), Math.max(...vals, 0));
   const lo = ticks[0];
   const hi = ticks[ticks.length - 1];
@@ -178,21 +184,30 @@ export function LineChart(props: ChartProps) {
   const band = points.length ? plotW / points.length : 0;
   const x = (i: number) => AXIS_W + i * band + band / 2;
   const y = (v: number) => PAD_TOP + ((hi - v) / (hi - lo || 1)) * plotH;
+  const everyDot = points.length <= 14;
 
-  // Segmenti continui: un mese senza dato interrompe la linea.
-  const segments: string[] = [];
-  let cur = "";
-  points.forEach((p, i) => {
-    const v = p.values[s.key];
-    if (v === null) {
-      if (cur) segments.push(cur);
-      cur = "";
-    } else cur += `${cur ? "L" : "M"}${x(i)},${y(v)}`;
+  // Segmenti continui per serie: un valore mancante interrompe la linea.
+  const lines = series.map((s) => {
+    const segments: string[] = [];
+    let cur = "";
+    let last: number | null = null;
+    points.forEach((p, i) => {
+      const v = p.values[s.key];
+      if (v === null) {
+        if (cur) segments.push(cur);
+        cur = "";
+      } else {
+        cur += `${cur ? "L" : "M"}${x(i)},${y(v)}`;
+        last = i;
+      }
+    });
+    if (cur) segments.push(cur);
+    return { s, segments, last };
   });
-  if (cur) segments.push(cur);
 
   return (
     <figure className="chart" ref={ref} onMouseLeave={() => setActive(null)}>
+      <Legend series={series} />
       {width > 0 && (
         <svg width={width} height={height} role="img" aria-label={props.ariaLabel}>
           {ticks.map((t) => (
@@ -204,32 +219,39 @@ export function LineChart(props: ChartProps) {
             </g>
           ))}
           {active !== null && <line x1={x(active)} x2={x(active)} y1={PAD_TOP} y2={PAD_TOP + plotH} className="crosshair" />}
-          {segments.map((d, i) => (
-            <path key={i} d={d} fill="none" stroke={s.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-          ))}
-          {points.map((p, i) => {
-            const v = p.values[s.key];
-            return (
-              <g key={p.key}>
-                {v !== null && (
-                  <circle cx={x(i)} cy={y(v)} r={active === i || p.key === props.selectedKey ? 5 : 4} fill={s.color} className="dot" />
-                )}
+          {lines.map(({ s, segments }) =>
+            segments.map((d, i) => (
+              <path key={`${s.key}-${i}`} d={d} fill="none" stroke={s.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+            )),
+          )}
+          {lines.map(({ s, last }) =>
+            points.map((p, i) => {
+              const v = p.values[s.key];
+              const show = v !== null && (everyDot || i === last || i === active);
+              if (!show) return null;
+              const big = active === i || p.key === props.selectedKey;
+              return <circle key={`${s.key}-${p.key}`} cx={x(i)} cy={y(v!)} r={big ? 5 : 4} fill={s.color} className="dot" />;
+            }),
+          )}
+          {points.map((p, i) => (
+            <g key={p.key}>
+              {p.label && (
                 <text x={x(i)} y={height - 6} className="tick" textAnchor="middle">
                   {p.label}
                 </text>
-                <rect
-                  x={AXIS_W + i * band}
-                  y={0}
-                  width={band}
-                  height={height}
-                  fill="transparent"
-                  onMouseEnter={() => setActive(i)}
-                  onClick={() => setActive(i)}
-                  style={{ cursor: "pointer" }}
-                />
-              </g>
-            );
-          })}
+              )}
+              <rect
+                x={AXIS_W + i * band}
+                y={0}
+                width={band}
+                height={height}
+                fill="transparent"
+                onMouseEnter={() => setActive(i)}
+                onClick={() => setActive(i)}
+                style={{ cursor: "pointer" }}
+              />
+            </g>
+          ))}
         </svg>
       )}
       {active !== null && points[active] && <Tooltip {...props} point={points[active]} left={x(active)} width={width} />}
@@ -263,7 +285,7 @@ function Tooltip({
   );
 }
 
-function DataTable({ points, series, formatValue, tableCaption }: ChartProps) {
+function DataTable({ points, series, formatValue, tableCaption, tableFirstColumn = "Mese" }: ChartProps) {
   return (
     <details className="chart-table">
       <summary>Mostra i dati in tabella</summary>
@@ -271,7 +293,7 @@ function DataTable({ points, series, formatValue, tableCaption }: ChartProps) {
         <caption className="sr-only">{tableCaption}</caption>
         <thead>
           <tr>
-            <th>Mese</th>
+            <th>{tableFirstColumn}</th>
             {series.map((s) => (
               <th key={s.key}>{s.name}</th>
             ))}

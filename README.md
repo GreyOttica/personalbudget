@@ -3,6 +3,8 @@
 PWA personale per registrare spese ed entrate, con dashboard, budget e analisi AI serale.
 Stack: Next.js (App Router) + TypeScript su Vercel, Supabase (Postgres, Auth, Storage, pg_cron), API Anthropic, Web Push.
 
+Design, colori e schermate di riferimento: [`docs/DESIGN.md`](docs/DESIGN.md).
+
 ## Struttura
 
 ```

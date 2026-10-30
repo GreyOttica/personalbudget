@@ -120,3 +120,42 @@ test("storico reale: i totali coincidono con quelli dell'import", { skip: !exist
     assert.equal(d.totals.investment, m.investment, m.month);
   }
 });
+
+test("vista giornaliera: ritmo, oggi, quanto resta al giorno, giorni della settimana", () => {
+  const txns: AnalyticsTxn[] = [
+    t("2026-09-15", "expense", 310, "bar"), // media variabile 310 €/mese (1 mese di storia)
+    t("2026-10-01", "expense", 900, "rent"),
+    t("2026-10-02", "expense", 10, "bar"), // venerdì
+    t("2026-10-05", "expense", 20, "bar"), // lunedì
+    t("2026-10-05", "expense", 5, "bar"),
+    t("2026-10-10", "expense", 7.5, "bar"), // oggi
+  ];
+  const d = buildDashboard({
+    txns,
+    categories: cats,
+    subcategories: [],
+    budgets: [{ category_id: "bar", valid_from: "2026-10-01", amount_cents: 31000 }],
+    month: "2026-10",
+    today: "2026-10-10",
+  });
+  const daily = d.daily;
+  assert.equal(daily.days.length, 31);
+  assert.equal(daily.days[0].fixed, 90000, "l'affitto è a parte, non sporca il ritmo");
+  assert.equal(daily.days[0].variable, 0);
+  assert.equal(daily.days[4].variable, 2500);
+  assert.equal(daily.days[4].count, 2);
+  assert.equal(daily.days[9].cumulativeVariable, 4250);
+  assert.equal(daily.days[10].cumulativeVariable, null, "i giorni futuri non hanno valore");
+  assert.equal(daily.variableTarget, 31000);
+  assert.equal(daily.variableTargetSource, "budget");
+  assert.equal(daily.today!.spent, 750);
+  assert.equal(daily.today!.count, 1);
+  // (310 − 35 spesi prima di oggi) / 22 giorni rimasti, oggi compreso
+  assert.equal(daily.today!.perDayLeft, Math.round((31000 - 3500) / 22));
+  assert.equal(daily.today!.averageDaily, 1000, "310 € / 31 giorni");
+  const mon = daily.weekdays[0];
+  const fri = daily.weekdays[4];
+  assert.equal(mon.label, "lun");
+  assert.ok(mon.average > fri.average);
+  assert.equal(d.daily.weekdays.length, 7);
+});

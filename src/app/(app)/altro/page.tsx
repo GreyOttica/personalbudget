@@ -11,6 +11,24 @@ export default async function MorePage() {
     <main className="page">
       <h1>Altro</h1>
 
+      <h2 className="group-title">Preferenze</h2>
+      <ul className="card menu">
+        <li>
+          <Link href="/impostazioni" className="menu-row">
+            <span className="menu-icon" aria-hidden>
+              🎨
+            </span>
+            <span className="menu-main">
+              <strong>Impostazioni</strong>
+              <span className="muted small">Tema, colori e, presto, notifiche</span>
+            </span>
+            <span className="chevron" aria-hidden>
+              ›
+            </span>
+          </Link>
+        </li>
+      </ul>
+
       <h2 className="group-title">Dati</h2>
       <ul className="card menu">
         <li>

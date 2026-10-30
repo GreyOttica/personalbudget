@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { SyncBadge } from "@/components/SyncBadge";
 import { centsToInput, parseAmount, relativeDay, romeDate } from "@/lib/entry/amount";
@@ -22,6 +23,10 @@ export function Movements() {
   const [type, setType] = useState<TypeFilter>("all");
   const [categoryId, setCategoryId] = useState("");
   const [tag, setTag] = useState("");
+  // Dal grafico "Per giorno" della Home si arriva con ?giorno=YYYY-MM-DD.
+  const router = useRouter();
+  const giorno = useSearchParams().get("giorno") ?? "";
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(giorno) ? giorno : "";
   const [limit, setLimit] = useState(PAGE);
   const [editing, setEditing] = useState<Row | null>(null);
 
@@ -31,6 +36,7 @@ export function Movements() {
     if (!txns || !reference) return [];
     const q = query.trim().toLowerCase();
     return txns.filter((t) => {
+      if (day && t.occurred_on !== day) return false;
       if (month && !t.occurred_on.startsWith(month)) return false;
       if (type !== "all" && t.type !== type) return false;
       if (categoryId && t.category_id !== categoryId) return false;
@@ -40,7 +46,7 @@ export function Movements() {
       const s = reference.subcategories.find((x) => x.id === t.subcategory_id);
       return [c?.name, s?.name, t.note, t.tag, centsToInput(t.amount_cents)].some((v) => v?.toLowerCase().includes(q));
     });
-  }, [txns, reference, query, month, type, categoryId, tag]);
+  }, [txns, reference, query, month, type, categoryId, tag, day]);
 
   const totals = useMemo(() => {
     const out = { expense: 0, income: 0, investment: 0 };
@@ -54,13 +60,14 @@ export function Movements() {
     return [...groups];
   }, [filtered, limit]);
 
-  const anyFilter = !!(query || month || type !== "all" || categoryId || tag);
+  const anyFilter = !!(query || month || type !== "all" || categoryId || tag || day);
   const reset = () => {
     setQuery("");
     setMonth("");
     setType("all");
     setCategoryId("");
     setTag("");
+    if (day) router.replace("/movimenti");
   };
 
   if (editing && reference) {
@@ -80,6 +87,13 @@ export function Movements() {
         placeholder="Cerca per categoria, nota, tag o importo"
         className="search"
       />
+      {day && (
+        <div className="chip-list">
+          <button type="button" className="chip chip-sm selected" onClick={reset} aria-label="Togli il filtro per giorno">
+            {relativeDay(day)} ✕
+          </button>
+        </div>
+      )}
       <div className="segmented" role="group" aria-label="Tipo di movimento">
         {(Object.keys(TYPE_LABELS) as TypeFilter[]).map((k) => (
           <button key={k} type="button" className={type === k ? "selected" : ""} aria-pressed={type === k} onClick={() => setType(k)}>
