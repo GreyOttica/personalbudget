@@ -247,11 +247,14 @@ type DbMonth = {
 
 async function supabase<T>(path: string, init: RequestInit): Promise<T> {
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("Imposta SUPABASE_URL (o NEXT_PUBLIC_SUPABASE_URL) e SUPABASE_SERVICE_ROLE_KEY in .env.local");
+  const key = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !key) throw new Error("Imposta NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SECRET_KEY in .env.local");
+  // Le secret key (sb_secret_…) vanno solo nell'header apikey; le legacy
+  // service_role key sono JWT e vanno anche in Authorization.
+  const auth: Record<string, string> = key.startsWith("eyJ") ? { Authorization: `Bearer ${key}` } : {};
   const res = await fetch(`${url.replace(/\/$/, "")}/rest/v1/${path}`, {
     ...init,
-    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", ...init.headers },
+    headers: { apikey: key, ...auth, "Content-Type": "application/json", ...init.headers },
   });
   const body = await res.text();
   if (!res.ok) throw new Error(`Supabase ${res.status} su ${path}: ${body}`);
