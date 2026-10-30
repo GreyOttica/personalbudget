@@ -6,6 +6,7 @@ import { SyncBadge } from "@/components/SyncBadge";
 import { formatDay, parseAmount, relativeDay, romeDate } from "@/lib/entry/amount";
 import { defaultDirection, txnType, type Category, type Direction, type Reference, type TxnDraft } from "@/lib/entry/types";
 import { formatCents } from "@/lib/format";
+import { QuickRepeat } from "@/components/QuickRepeat";
 import { useReference, useSyncState } from "@/lib/offline/hooks";
 import { saveTxn } from "@/lib/offline/sync";
 
@@ -90,6 +91,7 @@ export function NewEntry() {
 
   return (
     <Shell onBack={index > 0 ? back : undefined} progress={(index + 1) / STEPS.length}>
+      {step === "date" && <QuickRepeat reference={reference} onSaved={setSaved} />}
       {step === "date" && (
         <DateStep
           value={draft.date}

@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { ColumnChart, LineChart, type Point, type Series } from "@/components/charts/charts";
-import type { Daily, MonthPoint, SubcategoryRow } from "@/lib/analytics/dashboard";
+import { CalendarHeatmap } from "@/components/charts/more";
+import type { Daily, MonthPoint } from "@/lib/analytics/dashboard";
 import { formatCents, formatEuros, formatInt, formatMonth, formatMonthShort, formatPercent } from "@/lib/format";
 
 // Colori delle serie (slot 1–3 della palette validata): vedi --series-* in globals.css.
@@ -57,74 +58,6 @@ export function TrendCharts({ trend, selected }: { trend: MonthPoint[]; selected
   );
 }
 
-/** Barre orizzontali per sottocategoria, con filtro per categoria. */
-export function SubcategoryBreakdown({ rows }: { rows: SubcategoryRow[] }) {
-  const [category, setCategory] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
-
-  const categories = useMemo(() => {
-    const m = new Map<string, { id: string; name: string; emoji: string; amount: number }>();
-    for (const r of rows) {
-      const c = m.get(r.categoryId) ?? { id: r.categoryId, name: r.categoryName, emoji: r.emoji, amount: 0 };
-      c.amount += r.amount;
-      m.set(r.categoryId, c);
-    }
-    return [...m.values()].sort((a, b) => b.amount - a.amount);
-  }, [rows]);
-
-  if (!rows.length) return <p className="muted">Nessuna spesa in questo mese.</p>;
-
-  const filtered = category ? rows.filter((r) => r.categoryId === category) : rows;
-  const visible = showAll ? filtered : filtered.slice(0, 8);
-  const max = Math.max(...filtered.map((r) => r.amount));
-  const total = filtered.reduce((s, r) => s + r.amount, 0);
-
-  return (
-    <div className="card card-padded">
-      <div className="chip-scroll" role="group" aria-label="Filtra per categoria">
-        <button type="button" className={`chip chip-sm ${category === null ? "selected" : ""}`} onClick={() => setCategory(null)}>
-          Tutte
-        </button>
-        {categories.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            className={`chip chip-sm ${category === c.id ? "selected" : ""}`}
-            onClick={() => setCategory(category === c.id ? null : c.id)}
-          >
-            {c.emoji} {c.name}
-          </button>
-        ))}
-      </div>
-      <ul className="hbars">
-        {visible.map((r) => (
-          <li key={`${r.categoryId}|${r.id}`} className="hbar">
-            <div className="hbar-line">
-              <span>
-                {category ? "" : `${r.emoji} `}
-                {r.name}
-                <span className="muted small"> · {r.count}×</span>
-              </span>
-              <span className="hbar-value">{formatEuros(r.amount)}</span>
-            </div>
-            <div className="hbar-track">
-              <div className="hbar-fill" style={{ width: `${(r.amount / max) * 100}%` }} />
-            </div>
-          </li>
-        ))}
-      </ul>
-      <div className="hbars-foot">
-        <span className="muted small">Totale {formatEuros(total)}</span>
-        {filtered.length > 8 && (
-          <button type="button" className="link-button small" onClick={() => setShowAll(!showAll)}>
-            {showAll ? "Mostra meno" : `Mostra tutte (${filtered.length})`}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // --- giorno per giorno ---------------------------------------------------------
 
 const dayTitle = new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
@@ -136,7 +69,7 @@ const PACE: Series = { key: "pace", name: "Ritmo per il budget", color: "var(--m
 const PACE_AVG: Series = { key: "pace", name: "Ritmo medio", color: "var(--muted)" };
 const PER_DAY: Series = { key: "amount", name: "Spese", color: "var(--series-expense)" };
 
-type View = "pace" | "days" | "week";
+type View = "pace" | "calendar" | "days" | "week";
 
 export function DailyFocus({ daily, isCurrentMonth }: { daily: Daily; isCurrentMonth: boolean }) {
   const [view, setView] = useState<View>("pace");
@@ -182,11 +115,12 @@ export function DailyFocus({ daily, isCurrentMonth }: { daily: Daily; isCurrentM
   return (
     <div className="card card-padded daily">
       {daily.today && <TodayCard today={daily.today} source={daily.variableTargetSource} />}
-      <div className="segmented segmented-3" role="tablist" aria-label="Vista giornaliera">
+      <div className="segmented" role="tablist" aria-label="Vista giornaliera">
         {(
           [
             ["pace", "Ritmo"],
-            ["days", "Per giorno"],
+            ["calendar", "Calendario"],
+            ["days", "Giorni"],
             ["week", "Settimana"],
           ] as const
         ).map(([k, label]) => (
@@ -222,6 +156,43 @@ export function DailyFocus({ daily, isCurrentMonth }: { daily: Daily; isCurrentM
             tableCaption="Spese variabili accumulate per giorno"
             tableFirstColumn="Giorno"
             height={190}
+          />
+        </div>
+      )}
+
+      {view === "calendar" && (
+        <div>
+          <div className="chart-head">
+            <p className="muted small chart-sub">Più è scuro, più hai speso. Tocca un giorno per il dettaglio.</p>
+            <label className="toggle small">
+              <input type="checkbox" checked={withFixed} onChange={(e) => setWithFixed(e.target.checked)} />
+              Con spese fisse
+            </label>
+          </div>
+          <CalendarHeatmap
+            days={daily.days.map((d, i) => ({
+              date: d.date,
+              value: d.variable + (withFixed ? d.fixed : 0),
+              count: withFixed ? d.count : d.variableCount,
+              future: isCurrentMonth && i >= dayIndex,
+            }))}
+            format={formatEuros}
+            renderDetail={(d) => (
+              <>
+                <div>
+                  <strong className="cal-detail-title">{formatDayTitle(d.date)}</strong>
+                  <span className="muted small">
+                    {d.count === 0 ? "nessuna spesa" : `${d.count} ${d.count === 1 ? "spesa" : "spese"}`}
+                  </span>
+                </div>
+                <strong>{formatCents(d.value)}</strong>
+                {d.count > 0 && (
+                  <a href={`/movimenti?giorno=${d.date}`} className="small">
+                    Movimenti ›
+                  </a>
+                )}
+              </>
+            )}
           />
         </div>
       )}

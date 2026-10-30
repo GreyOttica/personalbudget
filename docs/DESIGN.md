@@ -21,11 +21,12 @@ Riferimento visivo dell'app. Le schermate in [`docs/design/`](design/) usano **d
 | Area | Contenuto |
 |---|---|
 | Barra in basso | Home · Movimenti · **+** · Budget · Altro (nascosta durante l'inserimento) |
-| Home | Mese (‹ ›) → spese del mese + budget + stima → riquadri Entrate / Investito / Risparmio → avvisi (max 3) → **Giorno per giorno** → budget per categoria → andamento 12 mesi → sottocategorie |
-| Giorno per giorno | "Oggi" e quanto puoi spendere al giorno · Ritmo (spese variabili accumulate vs ritmo del budget) · Per giorno (colonne, con/senza fisse) · Settimana (media per giorno della settimana) |
+| Home | Mese (‹ ›) → spese del mese + budget + stima → riquadri Entrate / Investito / Risparmio → avvisi (max 3) → **Giorno per giorno** → **Dove vanno i soldi** (ciambella, tocco = sottocategorie) → **Rispetto al solito** → budget per categoria → **Piccole spese** → **Flusso del mese** (Sankey) → andamento 12 mesi |
+| Giorno per giorno | "Oggi" e quanto puoi spendere al giorno · Ritmo (spese variabili accumulate vs ritmo del budget) · Calendario (giorni colorati per spesa) · Giorni (colonne, con/senza fisse) · Settimana (media per giorno della settimana) |
+| Nuovo movimento | "Ripeti in un tocco" (spese identiche ≥ 3 volte in 90 giorni, ≤ 100 €, niente fisse) → questionario a passi |
 | Movimenti | Ricerca, tipo (segmented), mese, categoria, tag, totali della selezione, raggruppati per giorno |
 | Budget | Proposta (media 6 mesi, fisse = mese scorso) e un campo per categoria, barra "Salva" sempre visibile |
-| Altro | Impostazioni, export CSV, import, account |
+| Altro | Impostazioni · **Analisi**: anno, saldo del conto, categorie nel tempo, ricorrenti e abbonamenti, viaggi ed eventi, obiettivi · export CSV, import, account |
 | Impostazioni | Tema (Automatico, Chiaro, Carta, Scuro, Nero) e colore di accento |
 
 ## Colori
@@ -34,6 +35,10 @@ Definiti come variabili CSS in `src/app/globals.css`; tema su `<html data-theme>
 
 **Serie dei grafici (fisse, non cambiano con l'accento):** primi tre slot della palette validata
 (verificata con `validate_palette.js`: separazione per daltonismo ΔE ≥ 9 in chiaro e scuro).
+
+**Categorie (ciambella, flusso):** le 7 categorie più pesanti degli ultimi 12 mesi hanno uno slot fisso
+della palette (adiacenze validate: CVD ΔE ≥ 9,1 in chiaro, ≥ 8,4 in scuro), le altre sono "Altre categorie" in grigio.
+Il colore segue la categoria, non la sua posizione nel mese. Calendario: scala sequenziale blu a 5 livelli (quantili).
 
 | Serie | Chiaro | Scuro |
 |---|---|---|
@@ -66,14 +71,22 @@ tooltip al tocco (un tocco fuori lo chiude), tabella "Mostra i dati in tabella" 
 
 | | | |
 |---|---|---|
-| ![Home](design/01-home.png) | ![Giorno per giorno](design/02-giorno-per-giorno.png) | ![Budget per categoria](design/03-budget-categorie.png) |
-| Home | Giorno per giorno | Budget per categoria |
-| ![Andamento](design/04-andamento.png) | ![Nuovo: categoria](design/05-nuovo-categoria.png) | ![Nuovo: importo](design/06-nuovo-importo.png) |
-| Andamento 12 mesi | Nuovo movimento: categoria | Nuovo movimento: importo |
-| ![Movimenti](design/07-movimenti.png) | ![Budget](design/08-budget.png) | ![Impostazioni](design/09-impostazioni-carta-viola.png) |
-| Movimenti con filtri | Budget mensili | Impostazioni (Carta + Viola) |
-| ![Nero](design/10-home-nero-verde.png) | ![Scuro](design/11-home-scuro.png) | |
-| Home in Nero + Verde | Home in Scuro | |
+| ![Home](design/01-home.png) | ![Giorno per giorno](design/02-giorno-per-giorno.png) | ![Calendario](design/16-calendario.png) |
+| Home | Giorno per giorno | Calendario |
+| ![Dove vanno i soldi](design/12-dove-vanno-i-soldi.png) | ![Rispetto al solito](design/13-rispetto-al-solito.png) | ![Budget per categoria](design/03-budget-categorie.png) |
+| Dove vanno i soldi | Rispetto al solito | Budget per categoria |
+| ![Piccole spese](design/14-piccole-spese.png) | ![Flusso del mese](design/15-flusso.png) | ![Andamento 12 mesi](design/04-andamento.png) |
+| Piccole spese | Flusso del mese | Andamento 12 mesi |
+| ![Ripeti in un tocco](design/23-ripeti.png) | ![Nuovo: categoria](design/05-nuovo-categoria.png) | ![Nuovo: importo](design/06-nuovo-importo.png) |
+| Ripeti in un tocco | Nuovo: categoria | Nuovo: importo |
+| ![Movimenti con filtri](design/07-movimenti.png) | ![Budget mensili](design/08-budget.png) | ![Riepilogo dell'anno](design/17-anno.png) |
+| Movimenti con filtri | Budget mensili | Riepilogo dell'anno |
+| ![Saldo del conto](design/18-saldo.png) | ![Categorie nel tempo](design/19-categorie.png) | ![Ricorrenti e abbonamenti](design/20-ricorrenti.png) |
+| Saldo del conto | Categorie nel tempo | Ricorrenti e abbonamenti |
+| ![Viaggio (tag)](design/21-viaggio.png) | ![Obiettivi di risparmio](design/22-obiettivi.png) | ![Impostazioni (Carta + Viola)](design/09-impostazioni-carta-viola.png) |
+| Viaggio (tag) | Obiettivi di risparmio | Impostazioni (Carta + Viola) |
+| ![Home in Nero + Verde](design/10-home-nero-verde.png) | ![Home in Scuro](design/11-home-scuro.png) |  |
+| Home in Nero + Verde | Home in Scuro |  |
 
 ## Idee da altre app (analisi ottobre 2026)
 
@@ -83,7 +96,10 @@ tooltip al tocco (un tocco fuori lo chiude), tabella "Mostra i dati in tabella" 
 | Barre delle categorie colorate in base al ritmo previsto, non solo allo speso | Copilot Money | ✅ trattino della stima sulle barre |
 | Grafico e saldo che si aggiornano subito dopo l'inserimento | Monefy | ✅ conferma "Salvato" + Home aggiornata |
 | "Speso oggi" e quanto resta al giorno | widget di molte app di tracciamento | ✅ riquadro Oggi |
-| Inserimento in un tocco per le spese ripetute (caffè, biglietto) | Expenses OK, TrackWise | 💡 proposta: "Ripeti" sugli ultimi movimenti |
-| Spese ricorrenti riconosciute in automatico | Copilot, Monarch | 💡 proposta (Fase 4) |
-| Obiettivi di risparmio con barra di avanzamento | YNAB, Monarch | 💡 proposta |
+| Inserimento in un tocco per le spese ripetute (caffè, biglietto) | Expenses OK, TrackWise | ✅ "Ripeti in un tocco" e "Ripeti oggi" |
+| Spese ricorrenti riconosciute in automatico, con avviso se l'importo cambia | Copilot, Monarch | ✅ Ricorrenti e abbonamenti |
+| Obiettivi di risparmio con barra di avanzamento | YNAB, Monarch | ✅ Obiettivi |
+| Flusso entrate → spese (Sankey) | Monarch | ✅ Flusso del mese |
+| Calendario della spesa | Spendee e altre | ✅ Giorno per giorno → Calendario |
+| Saldo/patrimonio nel tempo | Monarch | ✅ Saldo del conto (solo ING, stimato) |
 | Notifica serale con una frase chiara | Copilot | 🔜 Fase 5 |

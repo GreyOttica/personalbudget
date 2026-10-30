@@ -66,6 +66,7 @@ export type DayPoint = {
   variable: number; // spese variabili del giorno
   fixed: number; // spese fisse del giorno (affitto, abbonamenti)
   count: number; // movimenti di spesa del giorno
+  variableCount: number; // di cui spese variabili
   cumulativeVariable: number | null; // null per i giorni futuri
 };
 
@@ -355,13 +356,16 @@ function buildDaily(a: {
 
   const days: DayPoint[] = [];
   for (let d = 1; d <= daysInMonth; d++) {
-    days.push({ date: `${month}-${String(d).padStart(2, "0")}`, variable: 0, fixed: 0, count: 0, cumulativeVariable: null });
+    days.push({ date: `${month}-${String(d).padStart(2, "0")}`, variable: 0, fixed: 0, count: 0, variableCount: 0, cumulativeVariable: null });
   }
   for (const t of txns) {
     if (t.type !== "expense" || monthOf(t.occurred_on) !== month) continue;
     const p = days[Number(t.occurred_on.slice(8, 10)) - 1];
     if (fixedCats.has(t.category_id)) p.fixed += t.amount_cents;
-    else p.variable += t.amount_cents;
+    else {
+      p.variable += t.amount_cents;
+      p.variableCount++;
+    }
     p.count++;
   }
   let running = 0;

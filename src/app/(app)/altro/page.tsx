@@ -29,6 +29,94 @@ export default async function MorePage() {
         </li>
       </ul>
 
+      <h2 className="group-title">Analisi</h2>
+      <ul className="card menu">
+        <li>
+          <Link href="/anno" className="menu-row">
+            <span className="menu-icon" aria-hidden>
+              📅
+            </span>
+            <span className="menu-main">
+              <strong>Riepilogo dell&apos;anno</strong>
+              <span className="muted small">Totali, mesi migliori e peggiori, confronto con l&apos;anno prima</span>
+            </span>
+            <span className="chevron" aria-hidden>
+              ›
+            </span>
+          </Link>
+        </li>
+        <li>
+          <Link href="/saldo" className="menu-row">
+            <span className="menu-icon" aria-hidden>
+              🏦
+            </span>
+            <span className="menu-main">
+              <strong>Saldo del conto</strong>
+              <span className="muted small">Come cambia il saldo ING mese per mese</span>
+            </span>
+            <span className="chevron" aria-hidden>
+              ›
+            </span>
+          </Link>
+        </li>
+        <li>
+          <Link href="/categorie" className="menu-row">
+            <span className="menu-icon" aria-hidden>
+              📊
+            </span>
+            <span className="menu-main">
+              <strong>Categorie nel tempo</strong>
+              <span className="muted small">Andamento di ogni categoria negli ultimi 12 mesi</span>
+            </span>
+            <span className="chevron" aria-hidden>
+              ›
+            </span>
+          </Link>
+        </li>
+        <li>
+          <Link href="/ricorrenti" className="menu-row">
+            <span className="menu-icon" aria-hidden>
+              🔁
+            </span>
+            <span className="menu-main">
+              <strong>Ricorrenti e abbonamenti</strong>
+              <span className="muted small">Addebiti mensili riconosciuti in automatico</span>
+            </span>
+            <span className="chevron" aria-hidden>
+              ›
+            </span>
+          </Link>
+        </li>
+        <li>
+          <Link href="/viaggi" className="menu-row">
+            <span className="menu-icon" aria-hidden>
+              🏷️
+            </span>
+            <span className="menu-main">
+              <strong>Viaggi ed eventi</strong>
+              <span className="muted small">Quanto è costato ogni tag</span>
+            </span>
+            <span className="chevron" aria-hidden>
+              ›
+            </span>
+          </Link>
+        </li>
+        <li>
+          <Link href="/obiettivi" className="menu-row">
+            <span className="menu-icon" aria-hidden>
+              🎯
+            </span>
+            <span className="menu-main">
+              <strong>Obiettivi di risparmio</strong>
+              <span className="muted small">Quanto mettere da parte al mese</span>
+            </span>
+            <span className="chevron" aria-hidden>
+              ›
+            </span>
+          </Link>
+        </li>
+      </ul>
+
       <h2 className="group-title">Dati</h2>
       <ul className="card menu">
         <li>

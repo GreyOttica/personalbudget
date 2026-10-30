@@ -6,6 +6,7 @@ import { SyncBadge } from "@/components/SyncBadge";
 import { centsToInput, parseAmount, relativeDay, romeDate } from "@/lib/entry/amount";
 import { txnType, type Direction, type Reference, type Txn, type TxnDraft } from "@/lib/entry/types";
 import { formatCents, formatEuros, formatMonth } from "@/lib/format";
+import { repeatToday } from "@/components/QuickRepeat";
 import { useReference, useTransactions } from "@/lib/offline/hooks";
 import { deleteTxn, saveTxn } from "@/lib/offline/sync";
 
@@ -250,6 +251,12 @@ function EditTxn({ txn, reference, onClose }: { txn: Row; reference: Reference; 
     onClose();
   }
 
+  async function repeat() {
+    setBusy(true);
+    await repeatToday({ type: txn.type, category_id: txn.category_id, subcategory_id: txn.subcategory_id, amount_cents: txn.amount_cents, note: txn.note }, txn.account_id, txn.tag);
+    onClose();
+  }
+
   async function remove() {
     if (!window.confirm("Eliminare questo movimento?")) return;
     setBusy(true);
@@ -352,6 +359,9 @@ function EditTxn({ txn, reference, onClose }: { txn: Row; reference: Reference; 
         </label>
         <button type="submit" className="button button-big" disabled={!canSave || busy}>
           Salva modifiche
+        </button>
+        <button type="button" className="button button-secondary" onClick={() => void repeat()} disabled={busy}>
+          Ripeti oggi
         </button>
         <button type="button" className="button button-danger" onClick={() => void remove()} disabled={busy}>
           Elimina movimento

@@ -144,6 +144,8 @@ test("vista giornaliera: ritmo, oggi, quanto resta al giorno, giorni della setti
   assert.equal(daily.days[0].variable, 0);
   assert.equal(daily.days[4].variable, 2500);
   assert.equal(daily.days[4].count, 2);
+  assert.equal(daily.days[0].count, 1);
+  assert.equal(daily.days[0].variableCount, 0, "l'affitto non conta tra le spese variabili del giorno");
   assert.equal(daily.days[9].cumulativeVariable, 4250);
   assert.equal(daily.days[10].cumulativeVariable, null, "i giorni futuri non hanno valore");
   assert.equal(daily.variableTarget, 31000);
@@ -158,4 +160,150 @@ test("vista giornaliera: ritmo, oggi, quanto resta al giorno, giorni della setti
   assert.equal(mon.label, "lun");
   assert.ok(mon.average > fri.average);
   assert.equal(d.daily.weekdays.length, 7);
+});
+
+// --- analisi aggiuntive -------------------------------------------------------
+import {
+  balanceHistory,
+  categoryColorSlots,
+  categoryTrends,
+  composition,
+  goalProgress,
+  recurring,
+  repeatCandidates,
+  smallSpends,
+  tagSummaries,
+  yearSummary,
+  type InsightTxn,
+} from "../src/lib/analytics/insights.ts";
+
+const cats2: AnalyticsCategory[] = [
+  ...cats,
+  { id: "sub", name: "Abbonamenti", emoji: "🔁", kind: "expense", is_fixed: true },
+  { id: "food", name: "Supermercato", emoji: "🛒", kind: "expense", is_fixed: false },
+  ...Array.from({ length: 7 }, (_, i) => ({ id: `c${i}`, name: `Cat ${i}`, emoji: "•", kind: "expense" as const, is_fixed: false })),
+];
+const subs2 = [
+  { id: "s-bar", category_id: "bar", name: "Bar" },
+  { id: "s-sim", category_id: "sub", name: "SIM" },
+];
+const x = (d: string, type: InsightTxn["type"], euros: number, category_id: string, extra: Partial<InsightTxn> = {}): InsightTxn => ({
+  occurred_on: d,
+  type,
+  amount_cents: Math.round(euros * 100),
+  category_id,
+  subcategory_id: null,
+  ...extra,
+});
+
+test("colori stabili e composizione con 'Altro'", () => {
+  const txns: InsightTxn[] = [x("2026-09-01", "expense", 500, "food"), x("2026-10-01", "expense", 100, "bar")];
+  for (let i = 0; i < 7; i++) txns.push(x("2026-08-01", "expense", 50 - i, `c${i}`));
+  const slots = categoryColorSlots(txns, "2026-10");
+  assert.equal(slots.get("food"), 1, "la categoria più pesante dell'anno ha lo slot 1");
+  assert.equal(slots.get("bar"), 2);
+  assert.equal(slots.size, 7);
+  assert.equal(slots.get("c6"), undefined, "l'ottava categoria va in Altro");
+  const c = composition([...txns, x("2026-10-02", "expense", 10, "c6"), x("2026-10-03", "expense", 30, "food")], cats2, "2026-10", slots);
+  assert.equal(c.total, 14000);
+  assert.deepEqual(c.slices.map((s) => s.id), ["food", "bar", "other"], "ordine per slot, Altro in fondo");
+  assert.equal(c.slices.at(-1)!.amount, 1000);
+  assert.equal(c.other[0].id, "c6");
+});
+
+test("piccole spese: almeno 3 volte nel mese, ≤ 10 €, niente spese fisse", () => {
+  const txns: InsightTxn[] = [];
+  for (const m of ["2026-07", "2026-08", "2026-09"]) for (let d = 1; d <= 20; d++) txns.push(x(`${m}-${String(d).padStart(2, "0")}`, "expense", 1.5, "bar", { subcategory_id: "s-bar" }));
+  for (let d = 1; d <= 10; d++) txns.push(x(`2026-10-${String(d).padStart(2, "0")}`, "expense", 1.5, "bar", { subcategory_id: "s-bar" }));
+  txns.push(x("2026-10-03", "expense", 7, "sub", { subcategory_id: "s-sim" }), x("2026-10-04", "expense", 25, "bar"));
+  const s = smallSpends(txns, cats2, subs2, "2026-10");
+  assert.equal(s.items.length, 1);
+  assert.equal(s.items[0].name, "Bar");
+  assert.equal(s.items[0].count, 10);
+  assert.equal(s.items[0].total, 1500);
+  assert.equal(s.items[0].monthlyAverage, 3000);
+  assert.equal(s.items[0].yearly, 36000);
+});
+
+test("ricorrenti: mensili e stabili, con avviso se l'importo cambia", () => {
+  const txns: InsightTxn[] = [];
+  for (const [m, eur] of [["2026-05", 7.99], ["2026-06", 7.99], ["2026-07", 7.99], ["2026-08", 7.99], ["2026-09", 9.99]] as const) {
+    txns.push(x(`${m}-03`, "expense", eur, "sub", { subcategory_id: "s-sim" }));
+  }
+  for (let d = 1; d <= 28; d++) txns.push(x(`2026-09-${String(d).padStart(2, "0")}`, "expense", 1.5, "bar", { subcategory_id: "s-bar" }));
+  for (let d = 1; d <= 28; d++) txns.push(x(`2026-08-${String(d).padStart(2, "0")}`, "expense", 1.5, "bar", { subcategory_id: "s-bar" }));
+  for (let d = 1; d <= 28; d++) txns.push(x(`2026-07-${String(d).padStart(2, "0")}`, "expense", 1.5, "bar", { subcategory_id: "s-bar" }));
+  const r = recurring(txns, cats2, subs2, "2026-10-10");
+  assert.equal(r.length, 1, "il caffè quotidiano non è un abbonamento");
+  assert.equal(r[0].name, "SIM");
+  assert.equal(r[0].typical, 799);
+  assert.equal(r[0].changed, true);
+  assert.equal(r[0].last, 999);
+  assert.equal(r[0].nextDate, "2026-10-03");
+});
+
+test("saldo del conto: iniziale + entrate − spese − investimenti", () => {
+  const b = balanceHistory(
+    [
+      x("2025-12-24", "opening_balance", 3350, "altro"),
+      x("2025-12-27", "expense", 50, "bar"),
+      x("2026-01-10", "income", 2000, "pay"),
+      x("2026-01-15", "expense", 900, "rent"),
+      x("2026-01-29", "investment", 200, "inv"),
+    ],
+    "2026-02-05",
+  );
+  assert.deepEqual(b.points.map((p) => [p.month, p.balance]), [["2025-12", 330000], ["2026-01", 420000], ["2026-02", 420000]]);
+  assert.equal(b.current, 420000);
+  assert.equal(b.opening!.amount, 335000);
+});
+
+test("andamento per categoria, riepilogo dell'anno, tag", () => {
+  const txns: InsightTxn[] = [
+    x("2025-11-05", "income", 2000, "pay"),
+    x("2025-11-06", "expense", 500, "food"),
+    x("2026-01-10", "income", 2000, "pay"),
+    x("2026-01-11", "expense", 400, "food"),
+    x("2026-02-10", "income", 2000, "pay"),
+    x("2026-02-11", "expense", 1800, "food", { tag: "Lisbona - 2026" }),
+    x("2026-02-14", "expense", 200, "bar", { tag: "Lisbona - 2026" }),
+  ];
+  const tr = categoryTrends(txns, cats2, "2026-02", 12);
+  const food = tr.find((t) => t.id === "food")!;
+  assert.equal(food.values.length, 4, "dal primo mese con dati");
+  assert.equal(food.current, 180000);
+  assert.equal(food.average, Math.round((50000 + 0 + 40000) / 3));
+  const y = yearSummary(txns, cats2, 2026);
+  assert.equal(y.totals.income, 400000);
+  assert.equal(y.totals.expense, 240000);
+  assert.equal(y.best!.month, "2026-01");
+  assert.equal(y.worst!.month, "2026-02");
+  assert.equal(y.previous!.expense, 50000);
+  assert.equal(y.monthsWithData, 2);
+  const tags = tagSummaries(txns, cats2);
+  assert.equal(tags[0].tag, "Lisbona - 2026");
+  assert.equal(tags[0].total, 200000);
+  assert.equal(tags[0].days, 4);
+  assert.equal(tags[0].perDay, 50000);
+});
+
+test("obiettivi e spese da ripetere", () => {
+  const g = goalProgress({ id: "g", name: "Viaggio", emoji: "✈️", target_cents: 80000, saved_cents: 20000, target_date: "2026-12-15" }, "2026-10-31");
+  assert.equal(g.monthsLeft, 2);
+  assert.equal(g.perMonth, 30000);
+  assert.equal(g.ratio, 0.25);
+  assert.equal(g.overdue, false);
+  const r = repeatCandidates(
+    [
+      x("2026-10-01", "expense", 1.5, "bar", { subcategory_id: "s-bar", note: "Caffè" }),
+      x("2026-10-02", "expense", 1.5, "bar", { subcategory_id: "s-bar", note: "Caffè " }),
+      x("2026-10-03", "expense", 1.5, "bar", { subcategory_id: "s-bar", note: "Caffè" }),
+      x("2026-10-03", "expense", 2.2, "bar"),
+      x("2026-06-01", "expense", 1.5, "bar", { subcategory_id: "s-bar", note: "Caffè" }),
+    ],
+    "2026-10-31",
+  );
+  assert.equal(r.length, 1);
+  assert.equal(r[0].count, 3, "oltre 90 giorni non conta");
+  assert.equal(r[0].note, "Caffè");
 });

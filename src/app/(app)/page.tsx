@@ -6,14 +6,19 @@ import { addMonths, monthOf, type Dashboard } from "@/lib/analytics/dashboard";
 import { loadDashboard, parseMonth } from "@/lib/analytics/load";
 import { romeDate } from "@/lib/entry/amount";
 import { formatEuros, formatMonth, formatMonthName, formatPercent } from "@/lib/format";
-import { DailyFocus, SubcategoryBreakdown, TrendCharts } from "./DashboardCharts";
+import { categoryColorSlots, composition, smallSpends } from "@/lib/analytics/insights";
+import { DailyFocus, TrendCharts } from "./DashboardCharts";
+import { Composition, MonthFlow, SmallSpends, VersusUsual } from "./HomeInsights";
 
 export const metadata: Metadata = { title: "Home" };
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ m?: string }> }) {
   const { m } = await searchParams;
   const month = parseMonth(m);
-  const { dashboard: d } = await loadDashboard(month);
+  const { dashboard: d, categories, subcategories, txns } = await loadDashboard(month);
+  const slots = categoryColorSlots(txns, month);
+  const comp = composition(txns, categories, month, slots);
+  const small = smallSpends(txns, categories, subcategories, month);
   const current = monthOf(romeDate());
   const monthName = formatMonthName(month);
   const empty = d.trend.length === 0;
@@ -62,7 +67,32 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
             </div>
             <DailyFocus daily={d.daily} isCurrentMonth={d.isCurrentMonth} />
           </section>
+          <section className="section">
+            <div className="section-head">
+              <h2>Dove vanno i soldi</h2>
+              <span className="muted small">{monthName}</span>
+            </div>
+            <Composition slices={comp.slices} total={comp.total} other={comp.other} subcategories={d.subcategories} />
+          </section>
+          <section className="section">
+            <div className="section-head">
+              <h2>Rispetto al solito</h2>
+            </div>
+            <VersusUsual rows={d.categories} isCurrentMonth={d.isCurrentMonth} months={d.averages.months} />
+          </section>
           <CategoryBudgets d={d} />
+          <section className="section">
+            <div className="section-head">
+              <h2>Piccole spese che si sommano</h2>
+            </div>
+            <SmallSpends items={small.items} total={small.total} count={small.count} />
+          </section>
+          <section className="section">
+            <div className="section-head">
+              <h2>Flusso del mese</h2>
+            </div>
+            <MonthFlow d={d} slots={Object.fromEntries(slots)} />
+          </section>
           <section className="section">
             <div className="section-head">
               <h2>Andamento</h2>
@@ -70,13 +100,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
             </div>
             <TrendCharts trend={d.trend} selected={month} />
           </section>
-          <section className="section">
-            <div className="section-head">
-              <h2>Spese per sottocategoria</h2>
-              <span className="muted small">{monthName}</span>
-            </div>
-            <SubcategoryBreakdown rows={d.subcategories} />
-          </section>
+          <p className="muted small more-analysis">
+            Altre analisi in <Link href="/altro">Altro</Link>: anno, saldo del conto, categorie nel tempo, ricorrenti, viaggi e obiettivi.
+          </p>
         </>
       )}
     </main>
