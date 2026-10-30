@@ -1,38 +1,67 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { PageLink } from "@/components/PageLink";
 import { SyncBadge } from "@/components/SyncBadge";
 import { centsToInput, parseAmount, relativeDay, romeDate } from "@/lib/entry/amount";
 import { txnType, type Direction, type Reference, type Txn, type TxnDraft } from "@/lib/entry/types";
-import { formatCents } from "@/lib/format";
+import { formatCents, formatEuros, formatMonth } from "@/lib/format";
 import { useReference, useTransactions } from "@/lib/offline/hooks";
 import { deleteTxn, saveTxn } from "@/lib/offline/sync";
 
 type Row = Txn & { pending: boolean };
 
+type TypeFilter = "all" | "expense" | "income" | "investment";
+const TYPE_LABELS: Record<TypeFilter, string> = { all: "Tutti", expense: "Uscite", income: "Entrate", investment: "Investimenti" };
+const PAGE = 60;
+
 export function Movements() {
   const reference = useReference();
   const txns = useTransactions();
   const [query, setQuery] = useState("");
+  const [month, setMonth] = useState("");
+  const [type, setType] = useState<TypeFilter>("all");
+  const [categoryId, setCategoryId] = useState("");
+  const [tag, setTag] = useState("");
+  const [limit, setLimit] = useState(PAGE);
   const [editing, setEditing] = useState<Row | null>(null);
+
+  const months = useMemo(() => [...new Set((txns ?? []).map((t) => t.occurred_on.slice(0, 7)))].sort().reverse(), [txns]);
 
   const filtered = useMemo(() => {
     if (!txns || !reference) return [];
     const q = query.trim().toLowerCase();
-    if (!q) return txns;
     return txns.filter((t) => {
+      if (month && !t.occurred_on.startsWith(month)) return false;
+      if (type !== "all" && t.type !== type) return false;
+      if (categoryId && t.category_id !== categoryId) return false;
+      if (tag && t.tag !== tag) return false;
+      if (!q) return true;
       const c = reference.categories.find((x) => x.id === t.category_id);
       const s = reference.subcategories.find((x) => x.id === t.subcategory_id);
       return [c?.name, s?.name, t.note, t.tag, centsToInput(t.amount_cents)].some((v) => v?.toLowerCase().includes(q));
     });
-  }, [txns, reference, query]);
+  }, [txns, reference, query, month, type, categoryId, tag]);
+
+  const totals = useMemo(() => {
+    const out = { expense: 0, income: 0, investment: 0 };
+    for (const t of filtered) out[t.type] += t.amount_cents;
+    return out;
+  }, [filtered]);
 
   const byDay = useMemo(() => {
     const groups = new Map<string, Row[]>();
-    for (const t of filtered) groups.set(t.occurred_on, [...(groups.get(t.occurred_on) ?? []), t]);
+    for (const t of filtered.slice(0, limit)) groups.set(t.occurred_on, [...(groups.get(t.occurred_on) ?? []), t]);
     return [...groups];
-  }, [filtered]);
+  }, [filtered, limit]);
+
+  const anyFilter = !!(query || month || type !== "all" || categoryId || tag);
+  const reset = () => {
+    setQuery("");
+    setMonth("");
+    setType("all");
+    setCategoryId("");
+    setTag("");
+  };
 
   if (editing && reference) {
     return <EditTxn txn={editing} reference={reference} onClose={() => setEditing(null)} />;
@@ -40,17 +69,9 @@ export function Movements() {
 
   return (
     <main className="page">
-      <div className="entry-top">
-        <PageLink href="/" className="link-button">
-          ‹ Home
-        </PageLink>
-        <SyncBadge />
-      </div>
       <div className="header">
         <h1>Movimenti</h1>
-        <PageLink href="/nuovo" className="button button-small">
-          + Nuovo
-        </PageLink>
+        <SyncBadge />
       </div>
       <input
         type="search"
@@ -59,11 +80,66 @@ export function Movements() {
         placeholder="Cerca per categoria, nota, tag o importo"
         className="search"
       />
+      <div className="segmented" role="group" aria-label="Tipo di movimento">
+        {(Object.keys(TYPE_LABELS) as TypeFilter[]).map((k) => (
+          <button key={k} type="button" className={type === k ? "selected" : ""} aria-pressed={type === k} onClick={() => setType(k)}>
+            {TYPE_LABELS[k]}
+          </button>
+        ))}
+      </div>
+      {reference && (
+        <div className="filters">
+          <select value={month} onChange={(e) => setMonth(e.target.value)} aria-label="Mese">
+            <option value="">Tutti i mesi</option>
+            {months.map((m) => (
+              <option key={m} value={m}>
+                {formatMonth(`${m}-01`)}
+              </option>
+            ))}
+          </select>
+          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} aria-label="Categoria">
+            <option value="">Tutte le categorie</option>
+            {reference.categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.emoji} {c.name}
+              </option>
+            ))}
+          </select>
+          {reference.tags.length > 0 && (
+            <select value={tag} onChange={(e) => setTag(e.target.value)} aria-label="Tag">
+              <option value="">Tutti i tag</option>
+              {reference.tags.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+
+      {txns && reference && (
+        <div className="filter-summary">
+          <span className="muted small">
+            {filtered.length} {filtered.length === 1 ? "movimento" : "movimenti"}
+          </span>
+          <span className="small">
+            {totals.expense > 0 && <span>Uscite {formatEuros(totals.expense)}</span>}
+            {totals.income > 0 && <span>Entrate {formatEuros(totals.income)}</span>}
+            {totals.investment > 0 && <span>Investiti {formatEuros(totals.investment)}</span>}
+          </span>
+          {anyFilter && (
+            <button type="button" className="link-button small" onClick={reset}>
+              Azzera filtri
+            </button>
+          )}
+        </div>
+      )}
 
       {txns === undefined || reference === undefined ? null : !reference ? (
         <p className="muted stack">Serve una connessione la prima volta per scaricare i movimenti.</p>
       ) : byDay.length === 0 ? (
-        <p className="muted stack">{query ? "Nessun movimento trovato." : "Nessun movimento ancora."}</p>
+        <p className="muted stack">{anyFilter ? "Nessun movimento con questi filtri." : "Nessun movimento ancora."}</p>
       ) : (
         byDay.map(([day, rows]) => (
           <section key={day}>
@@ -78,8 +154,10 @@ export function Movements() {
           </section>
         ))
       )}
-      {txns && txns.length >= 300 && (
-        <p className="muted stack">Qui vedi gli ultimi 300 movimenti. L&apos;elenco completo con i filtri arriva con la dashboard.</p>
+      {filtered.length > limit && (
+        <button type="button" className="button button-secondary load-more" onClick={() => setLimit(limit + PAGE * 2)}>
+          Mostra altri ({filtered.length - limit})
+        </button>
       )}
     </main>
   );

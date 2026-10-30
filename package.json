@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test": "node --test scripts/test-analytics.ts",
     "import:dry": "node scripts/import-sheet.ts data/Personal_Budget_v_2.xlsx --dry-run",
     "import": "node --env-file=.env.local scripts/import-sheet.ts data/Personal_Budget_v_2.xlsx"
   },
