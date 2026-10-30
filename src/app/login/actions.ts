@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { ownerEmail } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
@@ -22,7 +23,11 @@ export async function requestCode(_prev: LoginState, formData: FormData): Promis
 
   const supabase = await createClient();
   // shouldCreateUser: false → nessuna registrazione dal login, l'utente esiste già.
-  const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+  // L'email contiene il codice (se il template lo prevede) e un link: entrambi funzionano.
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: { shouldCreateUser: false, emailRedirectTo: `${await siteOrigin()}/auth/callback` },
+  });
   if (error) {
     const tooMany = error.status === 429 || /rate limit/i.test(error.message);
     // Con shouldCreateUser: false Supabase risponde così se l'utente non esiste.
@@ -38,6 +43,13 @@ export async function requestCode(_prev: LoginState, formData: FormData): Promis
     };
   }
   return { step: "code", email, info: `Ti ho mandato un codice a ${email}.` };
+}
+
+async function siteOrigin(): Promise<string> {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  return `${proto}://${host}`;
 }
 
 export async function verifyCode(prev: LoginState, formData: FormData): Promise<LoginState> {

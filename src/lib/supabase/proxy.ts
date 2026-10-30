@@ -2,13 +2,22 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { ownerEmail, supabasePublishableKey, supabaseUrl } from "@/lib/env";
 
-const PUBLIC_PATHS = ["/login", "/auth/signout"];
+const PUBLIC_PATHS = ["/login", "/auth/signout", "/auth/callback"];
 
 /**
  * Rinnova la sessione Supabase a ogni richiesta e lascia passare solo il
  * proprietario. Le API rispondono 401, le pagine reindirizzano a /login.
  */
 export async function updateSession(request: NextRequest) {
+  // Il link nell'email può atterrare su qualunque pagina (per esempio la Site URL
+  // di Supabase): se porta un codice di accesso lo giro alla route che lo gestisce.
+  const { searchParams, pathname: path } = request.nextUrl;
+  if (path !== "/auth/callback" && (searchParams.has("code") || searchParams.has("token_hash"))) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/callback";
+    return NextResponse.redirect(url);
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(supabaseUrl(), supabasePublishableKey(), {

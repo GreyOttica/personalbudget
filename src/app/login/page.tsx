@@ -5,7 +5,12 @@ export const metadata: Metadata = { title: "Accedi" };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ errore?: string }> }) {
   const { errore } = await searchParams;
-  const notice = errore === "non-autorizzato" ? "Questo account non è autorizzato a usare l'app." : undefined;
+  const notice =
+    errore === "non-autorizzato"
+      ? "Questo account non è autorizzato a usare l'app."
+      : errore === "link"
+        ? "Il link non è valido o è scaduto, oppure l'hai aperto in un browser diverso da quello in cui l'hai chiesto. Chiedi un nuovo codice."
+        : undefined;
 
   return (
     <main className="page page-narrow">
