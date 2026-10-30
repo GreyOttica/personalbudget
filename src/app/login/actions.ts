@@ -25,12 +25,16 @@ export async function requestCode(_prev: LoginState, formData: FormData): Promis
   const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
   if (error) {
     const tooMany = error.status === 429 || /rate limit/i.test(error.message);
+    // Con shouldCreateUser: false Supabase risponde così se l'utente non esiste.
+    const noUser = error.code === "otp_disabled" || /signups not allowed/i.test(error.message);
     return {
       step: "email",
       email,
       error: tooMany
         ? "Troppe richieste: aspetta qualche minuto prima di chiedere un nuovo codice."
-        : `Invio del codice non riuscito: ${error.message}`,
+        : noUser
+          ? "Su Supabase non esiste ancora un utente con questa email: crealo in Authentication → Users → Add user."
+          : `Invio del codice non riuscito: ${error.message}`,
     };
   }
   return { step: "code", email, info: `Ti ho mandato un codice a ${email}.` };
