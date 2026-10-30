@@ -45,7 +45,6 @@ Altre email vengono rifiutate prima ancora di chiedere il codice a Supabase.
 
 ### 3. Import
 
-```bash
 Con `.env.local` già compilato (passo 2), prova senza scrivere nulla (riepilogo mensile + controllo con il foglio EU):
 
 ```bash
