@@ -1,0 +1,29 @@
+# Dati personali: non devono mai finire su GitHub
+data/
+*.xlsx
+*.xls
+*.csv
+backup-*.json
+
+# Segreti
+.env
+.env.*
+!.env.example
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+build/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+.vercel/
+
+# Supabase CLI
+supabase/.temp/
+supabase/.branches/
+
+# Sistema
+.DS_Store
+npm-debug.log*
