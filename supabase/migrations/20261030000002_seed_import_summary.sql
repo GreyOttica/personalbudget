@@ -14,7 +14,7 @@ insert into public.categories (name, emoji, kind, is_fixed, sort_order) values
   ('Abbigliamento',        '👕', 'expense',    false,  7),
   ('Abbonamenti',          '🔁', 'expense',    true,   8),
   ('Divertimento',         '🎉', 'expense',    false,  9),
-  ('Investimenti',         '📈', 'investment', false, 10),
+  ('Investimenti',         '📈', 'investment', true,  10),
   ('Regali',               '🎁', 'expense',    false, 11),
   ('Viaggi',               '✈️', 'expense',    false, 12),
   ('Cura / Benessere',     '💇', 'expense',    false, 13),
@@ -36,12 +36,15 @@ insert into public.accounts (name) values ('ING') on conflict (name) do nothing;
 -- La chiave di idempotenza è "Informazioni cronologiche" (timestamp del Form,
 -- unico per riga e stabile tra un export e l'altro).
 --
--- Regole di classificazione (dal brief):
+-- Regole di classificazione (stesse di scripts/import-sheet.ts):
+--   "Importo per pivot E/U" vuoto (riga senza segno) → ignorata, non importata
 --   nota contiene "valore iniziale"                → opening_balance (escluso da E/U)
---   "Importo per pivot E/U" > 0                    → income (anche in Altro)
---   categoria Investimenti, o Altro + nota "Investimenti"
---                                                  → investment (spostato in Investimenti)
---   tutto il resto, incluse le righe senza segno   → expense
+--   "Importo per pivot E/U" > 0                    → income (anche in Altro);
+--                                                    se Altro + nota "Stipendio" → categoria Stipendio
+--   categoria Investimenti                         → investment
+--   Altro + nota "Investimenti", oppure Altro senza nota da 200 € (versamento mensile)
+--                                                  → investment, spostato in Investimenti
+--   tutto il resto                                 → expense
 --
 -- Le righe già presenti vengono aggiornate solo se sono cambiate nel foglio e
 -- non sono state eliminate nell'app. Le righe sparite dal foglio non vengono
@@ -61,7 +64,9 @@ declare
   v_missing    int;
   v_new_subs   int;
   v_new_cats   int;
+  v_skipped    int;
   v_invest_id  uuid;
+  v_salary_id  uuid;
 begin
   if jsonb_typeof(p_rows) <> 'array' then
     raise exception 'p_rows deve essere un array JSON';
@@ -83,6 +88,10 @@ begin
 
   select count(*) into v_total from _import_rows;
 
+  -- Righe senza segno: escluse dall'import (come nel foglio EU).
+  delete from _import_rows where pivot is null;
+  get diagnostics v_skipped = row_count;
+
   select jsonb_agg(to_jsonb(i)) into v_bad
   from _import_rows i
   where import_key is null or occurred_on is null or amount_cents is null
@@ -91,7 +100,7 @@ begin
     raise exception 'Righe non valide: %', v_bad;
   end if;
 
-  if (select count(distinct import_key) from _import_rows) <> v_total then
+  if (select count(distinct import_key) from _import_rows) <> v_total - v_skipped then
     raise exception 'Chiavi "Informazioni cronologiche" duplicate nel file';
   end if;
 
@@ -109,8 +118,9 @@ begin
   select count(*) into v_new_cats from new_cats;
 
   select id into v_invest_id from public.categories where kind = 'investment' order by sort_order limit 1;
-  if v_invest_id is null then
-    raise exception 'Manca una categoria di tipo investment';
+  select id into v_salary_id from public.categories where name = 'Stipendio';
+  if v_invest_id is null or v_salary_id is null then
+    raise exception 'Mancano le categorie Investimenti o Stipendio';
   end if;
 
   alter table _import_rows add column category_id uuid, add column type public.txn_type;
@@ -121,15 +131,21 @@ begin
         when i.note ilike '%valore iniziale%' then 'opening_balance'
         when i.pivot > 0 then 'income'
         when c.kind = 'investment' then 'investment'
-        when c.name = 'Altro' and i.note ilike '%investiment%' then 'investment'
+        when c.name = 'Altro' and (i.note ilike '%investiment%' or (i.note is null and i.amount_cents = 20000))
+          then 'investment'
         else 'expense'
       end::public.txn_type
   from public.categories c
   where c.name = substring(i.category_label from '^\S+\s+(.*)$');
 
   -- Gli investimenti registrati in Altro passano alla categoria Investimenti.
-  update _import_rows set category_id = v_invest_id
+  update _import_rows set category_id = v_invest_id, sub_name = 'Versamento'
   where type = 'investment' and category_id <> v_invest_id;
+
+  -- Stipendi registrati in Altro passano alla categoria Stipendio.
+  update _import_rows i set category_id = v_salary_id, sub_name = 'Stipendio'
+  from public.categories c
+  where c.id = i.category_id and c.name = 'Altro' and i.type = 'income' and i.note ilike '%stipendio%';
 
   with new_subs as (
     insert into public.subcategories (category_id, name)
@@ -184,7 +200,8 @@ begin
     'rows_in_file',       v_total,
     'inserted',           v_inserted,
     'updated',            v_updated,
-    'unchanged',          v_total - v_inserted - v_updated,
+    'unchanged',          v_total - v_skipped - v_inserted - v_updated,
+    'skipped_unsigned',   v_skipped,
     'new_categories',     v_new_cats,
     'new_subcategories',  v_new_subs,
     'missing_in_sheet',   v_missing

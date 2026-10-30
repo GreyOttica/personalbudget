@@ -61,7 +61,7 @@ create table public.categories (
   name       text not null unique check (btrim(name) <> ''),
   emoji      text not null,
   kind       public.category_kind not null default 'expense',
-  is_fixed   boolean not null default false,   -- spese fisse (Affitto, Abbonamenti)
+  is_fixed   boolean not null default false,   -- importo ricorrente, non proiettato linearmente (Affitto, Abbonamenti, Investimenti)
   sort_order int not null default 0,
   is_active  boolean not null default true,
   created_at timestamptz not null default now()

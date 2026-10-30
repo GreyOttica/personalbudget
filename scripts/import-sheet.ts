@@ -26,6 +26,7 @@ type SheetRow = {
 };
 
 type TxnType = "expense" | "income" | "investment" | "opening_balance";
+type Classified = { type: TxnType | "skip"; category: string };
 
 type MonthTotals = {
   income: number;
@@ -42,11 +43,14 @@ type MonthTotals = {
 
 const FIXED = new Set(["Affitto", "Abbonamenti"]);
 const INVESTMENT_CATEGORY = "Investimenti";
+const SALARY_CATEGORY = "Stipendio";
+// Versamento mensile in investimenti registrato in Altro senza nota.
+const MONTHLY_INVESTMENT_CENTS = 20_000;
 
 // --- utilità -------------------------------------------------------------------
 
 const eur = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" });
-const pct = new Intl.NumberFormat("it-IT", { style: "percent", maximumFractionDigits: 1 });
+const pct = new Intl.NumberFormat("it-IT", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const monthFmt = new Intl.DateTimeFormat("it-IT", { month: "short", year: "numeric", timeZone: "UTC" });
 
 const cents = (n: number) => Math.round(n * 100);
@@ -63,14 +67,20 @@ function categoryName(label: string): string {
   return label.replace(/^\S+\s+/, "").trim();
 }
 
-function classify(r: SheetRow): TxnType {
+// Stesse regole di public.import_sheet_rows: se ne cambi una, cambia anche l'altra.
+function classify(r: SheetRow): Classified {
   const note = (r.note ?? "").toLowerCase();
   const cat = categoryName(r.category);
-  if (note.includes("valore iniziale")) return "opening_balance";
-  if (r.pivot !== null && r.pivot > 0) return "income";
-  if (cat === INVESTMENT_CATEGORY) return "investment";
-  if (cat === "Altro" && note.includes("investiment")) return "investment";
-  return "expense";
+  if (r.pivot === null) return { type: "skip", category: cat };
+  if (note.includes("valore iniziale")) return { type: "opening_balance", category: cat };
+  if (r.pivot > 0) {
+    return { type: "income", category: cat === "Altro" && note.includes("stipendio") ? SALARY_CATEGORY : cat };
+  }
+  if (cat === INVESTMENT_CATEGORY) return { type: "investment", category: cat };
+  if (cat === "Altro" && (note.includes("investiment") || (r.note === null && cents(r.amount) === MONTHLY_INVESTMENT_CENTS))) {
+    return { type: "investment", category: INVESTMENT_CATEGORY };
+  }
+  return { type: "expense", category: cat };
 }
 
 // --- lettura del foglio -------------------------------------------------------
@@ -167,18 +177,18 @@ function summarize(rows: SheetRow[]): Map<string, MonthTotals> {
     }
     const t = months.get(m)!;
     const amount = cents(r.amount);
-    const type = classify(r);
+    const { type, category } = classify(r);
 
     if (r.pivot === null) t.unsigned += amount;
     else t.euByCategory.set(r.category, (t.euByCategory.get(r.category) ?? 0) + cents(r.pivot));
 
-    if (type === "opening_balance") continue;
+    if (type === "opening_balance" || type === "skip") continue;
     t.count++;
     if (type === "income") t.income += amount;
     else if (type === "investment") t.investment += amount;
     else {
       t.expense += amount;
-      if (FIXED.has(categoryName(r.category))) t.fixed += amount;
+      if (FIXED.has(category)) t.fixed += amount;
     }
   }
   return new Map([...months].sort(([a], [b]) => a.localeCompare(b)));
@@ -246,12 +256,16 @@ async function main() {
   }
 
   const months = summarize(rows);
-  const opening = rows.filter((r) => classify(r) === "opening_balance");
+  const opening = rows.filter((r) => classify(r).type === "opening_balance");
   const unsigned = rows.filter((r) => r.pivot === null);
   console.log(`\nFile: ${file}`);
   console.log(`Righe lette: ${rows.length}  (dal ${rows.map((r) => r.date).sort()[0]} al ${rows.map((r) => r.date).sort().at(-1)})`);
   console.log(`Saldo iniziale escluso: ${opening.map((r) => `${fmt(cents(r.amount))} (${r.date})`).join(", ") || "nessuno"}`);
-  console.log(`Righe senza segno trattate come uscite: ${unsigned.length} per ${fmt(unsigned.reduce((s, r) => s + cents(r.amount), 0))}`);
+  console.log(`Righe senza segno ignorate: ${unsigned.length} per ${fmt(unsigned.reduce((s, r) => s + cents(r.amount), 0))}`);
+  const moved = rows.filter((r) => categoryName(r.category) !== classify(r).category);
+  for (const r of moved) {
+    console.log(`Spostata in ${classify(r).category}: ${r.date} ${fmt(cents(r.amount))} ${r.note ?? "(senza nota)"}`);
+  }
 
   // 1) Riepilogo mensile secondo le regole dell'app.
   console.log("\nRiepilogo mensile (regole dell'app: investimenti separati dalle spese)\n");
@@ -282,24 +296,22 @@ async function main() {
       const ok = rebuilt.income === euIn && rebuilt.expense === euOut;
       allMatch &&= ok;
       // Differenza tra le uscite dell'app (spese + investimenti) e quelle di EU:
-      // righe senza segno + compensazioni tra entrate e uscite nella stessa categoria.
-      const netting = t.expense + t.investment - t.unsigned - euOut;
+      // compensazioni tra entrate e uscite registrate nella stessa categoria.
+      const netting = t.expense + t.investment - euOut;
       return [
         monthLabel(m),
         fmt(euIn),
         fmt(euOut),
         ok ? "✓" : `✗ (${fmt(rebuilt.income)} / ${fmt(rebuilt.expense)})`,
-        fmt(t.unsigned),
         fmt(netting),
       ];
     });
-    printTable(["Mese", "EU entrate", "EU uscite", "Ricostruzione", "Senza segno", "Compensazioni"], table);
+    printTable(["Mese", "EU entrate", "EU uscite", "Ricostruzione", "Compensazioni"], table);
     console.log(
       allMatch
         ? "\n✓ Il foglio EU coincide al centesimo con lo storico letto. Le differenze rispetto all'app sono\n" +
-            "  solo le righe senza segno (EU le ignora) e le compensazioni: la pivot somma per categoria,\n" +
-            "  quindi in Altro le spese si sottraggono da stipendi e rimborsi registrati nella stessa categoria.\n" +
-            "  Il saldo del mese (entrate − uscite) è identico."
+            "  solo le compensazioni: la pivot somma per categoria, quindi in Altro le spese si sottraggono\n" +
+            "  da stipendi e rimborsi registrati nella stessa categoria. Il saldo del mese è identico."
         : "\n✗ Il foglio EU non coincide con lo storico: controlla i mesi segnati.",
     );
   }
