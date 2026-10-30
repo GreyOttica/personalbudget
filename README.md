@@ -129,3 +129,17 @@ Import da riga di comando, con il file in `data/Personal_Budget_v_2.xlsx`:
 npm run import:dry   # solo riepilogo e controllo con il foglio EU
 npm run import       # scrive su Supabase
 ```
+
+## Versioni e ritorno a una versione precedente
+
+| Branch | Contenuto |
+|---|---|
+| `v1` | **V1**: Fasi 1–3 complete + vista giornaliera, temi, mockup di design (commit `0a9dbf3`) |
+| `design-v1` | prima versione della grafica (prima di temi e vista giornaliera) |
+| `main` | versione in sviluppo, quella pubblicata su Vercel |
+
+Per tornare alla V1 senza toccare il codice: su Vercel **Deployments** → il deploy con commit `0a9dbf3`
+→ **⋯** → **Instant Rollback** (o **Promote to Production**). Per riportare anche il codice di `main`
+alla V1, chiedilo in una sessione: si fa un commit che ripristina i file di `v1`, senza perdere la storia.
+
+Il database non segue le versioni del codice: le migrazioni aggiunte dopo la V1 restano, e la V1 le ignora.
