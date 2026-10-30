@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { PageLink } from "@/components/PageLink";
+import { SignOutButton } from "@/components/SignOutButton";
 import { formatCents, formatMonth, formatPercent } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 
@@ -33,14 +35,14 @@ export default async function Home() {
           <h1>Personal Budget</h1>
           <p className="muted">{email}</p>
         </div>
-        <form action="/auth/signout" method="post">
-          <button type="submit" className="link-button">
-            Esci
-          </button>
-        </form>
+        <SignOutButton />
       </div>
 
+      <PageLink href="/nuovo" className="button button-big home-cta">
+        + Nuovo movimento
+      </PageLink>
       <nav className="nav-links">
+        <PageLink href="/movimenti">Movimenti</PageLink>
         <Link href="/import">Import storico</Link>
       </nav>
 

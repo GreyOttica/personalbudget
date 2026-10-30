@@ -19,10 +19,12 @@ scripts/import-sheet.ts import da riga di comando (alternativa alla pagina /impo
 
 1. Crea un account su [supabase.com](https://supabase.com) e un progetto **Free**, regione in UE (per esempio Frankfurt).
    Annota la password del database in un posto sicuro (non serve all'app).
-2. **SQL Editor** → **New query** → incolla tutto il contenuto di
-   [`supabase/migrations/20261030000001_init.sql`](supabase/migrations/20261030000001_init.sql) → **Run**.
-   Poi una nuova query con
-   [`supabase/migrations/20261030000002_seed_import_summary.sql`](supabase/migrations/20261030000002_seed_import_summary.sql) → **Run**.
+2. **SQL Editor** → **New query** → incolla tutto il contenuto di ciascun file in `supabase/migrations/`,
+   uno per query e in ordine di nome, poi **Run** (se Supabase avvisa di "destructive operations", conferma:
+   riguardano solo tabelle temporanee e permessi). Ogni file va eseguito una volta sola:
+   - [`20261030000001_init.sql`](supabase/migrations/20261030000001_init.sql)
+   - [`20261030000002_seed_import_summary.sql`](supabase/migrations/20261030000002_seed_import_summary.sql)
+   - [`20261031000003_entry_sync.sql`](supabase/migrations/20261031000003_entry_sync.sql) (Fase 2)
 3. **Authentication → Emails → Templates → Magic Link**: sostituisci il corpo del messaggio con
    `<p>Il tuo codice di accesso: <strong>{{ .Token }}</strong></p>` e salva.
    L'app usa il codice e non il link, perché su iPhone il link si aprirebbe in Safari e non nella PWA.
@@ -68,6 +70,27 @@ quindi aggiunge solo le righe nuove e aggiorna quelle modificate nel foglio. Non
 dal foglio sono solo segnalate. Le righe eliminate dall'app non vengono ripristinate.
 
 Il piano email gratuito di Supabase invia pochi messaggi all'ora: se chiedi il codice molte volte di fila, aspetta.
+
+## Installazione su iPhone
+
+1. Apri l'indirizzo dell'app in **Safari** (non in Chrome o in un'altra app).
+2. Accedi con email e codice.
+3. Tocca **Condividi** (il quadrato con la freccia) → **Aggiungi alla schermata Home** → **Aggiungi**.
+4. Apri l'app dall'icona "Budget": si apre direttamente su **Nuovo movimento**, a schermo intero.
+
+L'app installata ha una memoria separata da Safari, quindi al primo avvio chiede di nuovo l'accesso: serve il
+**codice** dell'email (il link si aprirebbe in Safari). Per questo Supabase deve inviare email con
+`{{ .Token }}` nel template, cosa possibile solo con un SMTP personalizzato (per esempio Gmail con una
+"password per le app": **Authentication → Emails → SMTP Settings**).
+
+## Uso offline
+
+- I movimenti si salvano sul telefono e partono verso il server appena c'è rete: al salvataggio, al ritorno
+  della rete, quando riapri l'app e ogni 30 secondi finché c'è qualcosa in attesa. Il badge in alto mostra lo stato.
+- Ogni movimento ha un identificativo generato sul telefono: rimandarlo non crea duplicati.
+- Se modifichi lo stesso movimento in due posti, vince la modifica più recente.
+- Serve aver aperto l'app almeno una volta con la rete, per scaricare categorie e movimenti.
+- "Esci" cancella dal telefono i dati salvati per l'offline (avvisa se ci sono movimenti non sincronizzati).
 
 ## Regole di classificazione dello storico
 
