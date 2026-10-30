@@ -7,7 +7,12 @@ function required(name: string, value: string | undefined): string {
 
 // Le NEXT_PUBLIC_* vanno lette con accesso statico, altrimenti Next.js non le
 // incorpora nel bundle del browser.
-export const supabaseUrl = () => required("NEXT_PUBLIC_SUPABASE_URL", process.env.NEXT_PUBLIC_SUPABASE_URL);
+// Accetta anche l'URL copiato con "/rest/v1/" o una barra finale.
+export const supabaseUrl = () =>
+  required("NEXT_PUBLIC_SUPABASE_URL", process.env.NEXT_PUBLIC_SUPABASE_URL)
+    .trim()
+    .replace(/\/(rest|auth)\/v1\/?$/, "")
+    .replace(/\/+$/, "");
 
 export const supabasePublishableKey = () =>
   required("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
