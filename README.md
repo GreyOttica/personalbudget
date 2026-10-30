@@ -6,62 +6,70 @@ Stack: Next.js (App Router) + TypeScript su Vercel, Supabase (Postgres, Auth, St
 ## Struttura
 
 ```
-supabase/migrations/   schema SQL, RLS, funzione di import, viste di riepilogo
-scripts/import-sheet.ts import idempotente dello storico dal Google Sheet esportato in .xlsx
-scripts/lib/xlsx.ts     lettore XLSX senza dipendenze
-data/                   file Excel locali (ignorati da git)
+supabase/migrations/    schema SQL, RLS, funzione di import, viste di riepilogo
+src/app/                pagine (login, home, import)
+src/lib/import/         lettura del file Excel e regole di classificazione
+src/lib/supabase/       client Supabase (sessione utente, proxy, secret key)
+scripts/import-sheet.ts import da riga di comando (alternativa alla pagina /import)
 ```
 
-## Fase 1 — Database e import dello storico
+## Messa online (tutto da browser)
 
-Requisiti: Node.js 22.18 o successivo (lo script di import è TypeScript eseguito direttamente da Node).
+### 1. Supabase
 
-### 1. Progetto Supabase
-
-1. Crea un progetto su [supabase.com](https://supabase.com) (piano Free, regione `eu-central-1` o un'altra in UE).
-2. **SQL Editor** → incolla ed esegui, in ordine, i file in `supabase/migrations/`.
-3. **Authentication → Email Templates → Magic Link**: sostituisci il corpo con un testo che contenga il codice, per esempio
-   `<p>Il tuo codice di accesso: <strong>{{ .Token }}</strong></p>`.
-   L'app usa il codice OTP e non il link, perché su iPhone il link si aprirebbe in Safari e non nella PWA.
-4. Crea il tuo utente: **Authentication → Users → Add user → Create new user** con la tua email, spuntando **Auto Confirm User** (la password puoi lasciarla casuale: non la userai).
-5. Registrati come proprietario (SQL Editor, con la tua email):
+1. Crea un account su [supabase.com](https://supabase.com) e un progetto **Free**, regione in UE (per esempio Frankfurt).
+   Annota la password del database in un posto sicuro (non serve all'app).
+2. **SQL Editor** → **New query** → incolla tutto il contenuto di
+   [`supabase/migrations/20261030000001_init.sql`](supabase/migrations/20261030000001_init.sql) → **Run**.
+   Poi una nuova query con
+   [`supabase/migrations/20261030000002_seed_import_summary.sql`](supabase/migrations/20261030000002_seed_import_summary.sql) → **Run**.
+3. **Authentication → Emails → Templates → Magic Link**: sostituisci il corpo del messaggio con
+   `<p>Il tuo codice di accesso: <strong>{{ .Token }}</strong></p>` e salva.
+   L'app usa il codice e non il link, perché su iPhone il link si aprirebbe in Safari e non nella PWA.
+4. **Authentication → Users → Add user → Create new user**: la tua email, una password qualsiasi (non la userai),
+   spunta **Auto Confirm User**.
+5. **SQL Editor**, nuova query, con la tua email:
    ```sql
    insert into public.app_owner (user_id)
    select id from auth.users where email = 'tua@email.it';
    ```
-6. **Authentication → Sign In / Providers**: disattiva "Allow new users to sign up". Da qui in poi nessun altro può creare un account.
+6. **Authentication → Sign In / Providers**: disattiva **Allow new users to sign up** e salva.
+7. **Project Settings → API Keys**: tieni aperta la pagina, ti servono URL del progetto, publishable key e secret key.
+   L'URL è anche in **Project Settings → Data API** (formato `https://xxxx.supabase.co`).
 
-### 2. App in locale
+### 2. Vercel
 
-```bash
-npm install
-cp .env.example .env.local   # compila NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY, OWNER_EMAIL
-npm run dev
-```
+1. Crea un account su [vercel.com](https://vercel.com) con **Continue with GitHub** (piano Hobby).
+2. **Add New… → Project** → importa `GreyOttica/personalbudget`. Se non compare, clicca su
+   **Adjust GitHub App Permissions** e dai accesso al repository.
+3. Prima di premere Deploy apri **Environment Variables** e aggiungi:
 
-Apri http://localhost:3000: senza sessione vieni mandato su `/login`. Inserisci la tua email, ricevi il codice,
-inseriscilo e vedi il riepilogo mensile letto dal database con la tua sessione (quindi passando da RLS).
-Altre email vengono rifiutate prima ancora di chiedere il codice a Supabase.
+   | Nome | Valore |
+   |---|---|
+   | `NEXT_PUBLIC_SUPABASE_URL` | URL del progetto Supabase |
+   | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | publishable key (`sb_publishable_…`) |
+   | `SUPABASE_SECRET_KEY` | secret key (`sb_secret_…`) |
+   | `OWNER_EMAIL` | la tua email |
 
-### 3. Import
+4. **Deploy**. Dopo un paio di minuti ottieni un indirizzo tipo `https://personalbudget-xxxx.vercel.app`.
+5. Su Supabase, **Authentication → URL Configuration → Site URL**: incolla quell'indirizzo e salva.
 
-Con `.env.local` già compilato (passo 2), prova senza scrivere nulla (riepilogo mensile + controllo con il foglio EU):
+Se cambi una variabile d'ambiente su Vercel, rifai il deploy: **Deployments → … → Redeploy**.
 
-```bash
-node scripts/import-sheet.ts data/Personal_Budget_v_2.xlsx --dry-run
-```
+### 3. Primo accesso e import dello storico
 
-Import vero e proprio:
+1. Apri l'indirizzo Vercel, inserisci la tua email, poi il codice che ricevi.
+2. **Import storico** → scegli il file Excel (Google Sheets → File → Scarica → Microsoft Excel) → **Anteprima**.
+   Controlla riepilogo mensile e controllo con il foglio EU, poi premi **Importa**.
+3. Deve comparire "✓ Il riepilogo del database coincide al centesimo con il file". Torna alla Home: vedi gli stessi mesi.
 
-```bash
-node --env-file=.env.local scripts/import-sheet.ts data/Personal_Budget_v_2.xlsx
-```
-
-Lo script si può rilanciare quante volte vuoi: la chiave è la colonna "Informazioni cronologiche" del Google Form,
+L'import si può ripetere quante volte vuoi: la chiave è la colonna "Informazioni cronologiche" del Google Form,
 quindi aggiunge solo le righe nuove e aggiorna quelle modificate nel foglio. Non cancella nulla: le righe sparite
 dal foglio sono solo segnalate. Le righe eliminate dall'app non vengono ripristinate.
 
-### Regole di classificazione
+Il piano email gratuito di Supabase invia pochi messaggi all'ora: se chiedi il codice molte volte di fila, aspetta.
+
+## Regole di classificazione dello storico
 
 | Condizione | Tipo |
 |---|---|
@@ -75,3 +83,24 @@ dal foglio sono solo segnalate. Le righe eliminate dall'app non vengono ripristi
 
 Importi ricorrenti (non proiettati linearmente nella stima di fine mese, si usa l'importo del mese precedente):
 🔑 Affitto (900 €), 📈 Investimenti (200 €), 🔁 Abbonamenti (SIM, 7 €).
+
+Le regole sono implementate due volte, in `src/lib/import/sheet.ts` (anteprima e verifica) e in
+`public.import_sheet_rows` (scrittura): vanno cambiate insieme.
+
+## Sviluppo in locale (facoltativo)
+
+Requisiti: Node.js 22.18 o successivo.
+
+```bash
+npm install
+cp .env.example .env.local   # stesse variabili di Vercel
+npm run dev                   # http://localhost:3000 sul tuo computer
+npm run typecheck && npm run lint
+```
+
+Import da riga di comando, con il file in `data/Personal_Budget_v_2.xlsx`:
+
+```bash
+npm run import:dry   # solo riepilogo e controllo con il foglio EU
+npm run import       # scrive su Supabase
+```

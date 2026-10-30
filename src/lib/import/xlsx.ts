@@ -1,6 +1,5 @@
 // Lettore XLSX minimale e senza dipendenze, sufficiente per l'export di Google
 // Sheets: legge i valori memorizzati nelle celle (non ricalcola le formule).
-import { readFileSync } from "node:fs";
 import { inflateRawSync } from "node:zlib";
 
 export type Cell = string | number | boolean | null;
@@ -76,8 +75,8 @@ export class Workbook {
   private shared: string[] = [];
   private sheetPaths = new Map<string, string>();
 
-  constructor(path: string) {
-    this.files = unzip(readFileSync(path));
+  constructor(data: Buffer) {
+    this.files = unzip(data);
 
     const sst = this.files.get("xl/sharedStrings.xml");
     if (sst) {

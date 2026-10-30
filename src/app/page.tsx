@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { formatCents, formatMonth, formatPercent } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 
@@ -39,13 +40,17 @@ export default async function Home() {
         </form>
       </div>
 
+      <nav className="nav-links">
+        <Link href="/import">Import storico</Link>
+      </nav>
+
       <h2>Riepilogo mensile</h2>
       {error ? (
         <p className="alert">Errore nel caricamento: {error.message}</p>
       ) : !months?.length ? (
         <p className="muted">
-          Nessun movimento visibile. Se hai già fatto l&apos;import, controlla di aver registrato il tuo utente in
-          app_owner (vedi README).
+          Nessun movimento ancora. Vai su <Link href="/import">Import storico</Link> e carica il file Excel. Se
+          l&apos;hai già fatto, controlla di aver registrato il tuo utente come proprietario (passo 5 della guida).
         </p>
       ) : (
         <div className="card">

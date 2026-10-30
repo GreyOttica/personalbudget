@@ -14,3 +14,6 @@ export const supabasePublishableKey = () =>
 
 /** Email dell'unico utente ammesso. Solo lato server. */
 export const ownerEmail = () => required("OWNER_EMAIL", process.env.OWNER_EMAIL).trim().toLowerCase();
+
+/** Secret key (bypassa RLS). Solo lato server. */
+export const supabaseSecretKey = () => required("SUPABASE_SECRET_KEY", process.env.SUPABASE_SECRET_KEY);
