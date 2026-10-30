@@ -22,3 +22,16 @@ export const ownerEmail = () => required("OWNER_EMAIL", process.env.OWNER_EMAIL)
 
 /** Secret key (bypassa RLS). Solo lato server. */
 export const supabaseSecretKey = () => required("SUPABASE_SECRET_KEY", process.env.SUPABASE_SECRET_KEY);
+
+/** Nomi delle variabili obbligatorie che mancano (solo i nomi, mai i valori). */
+export function missingEnv(): string[] {
+  const values: Record<string, string | undefined> = {
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY,
+    OWNER_EMAIL: process.env.OWNER_EMAIL,
+  };
+  return Object.entries(values)
+    .filter(([, v]) => !v?.trim())
+    .map(([k]) => k);
+}
