@@ -1,7 +1,7 @@
 # Design e layout
 
 Riferimento visivo dell'app. Le schermate in [`docs/design/`](design/) usano **dati inventati**
-(nessun movimento reale). Il codice della prima versione del design è marcato con il tag git `design-v1`.
+(nessun movimento reale). Il codice della prima versione del design è salvato nel branch `design-v1` su GitHub.
 
 ## Principi
 
