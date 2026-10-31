@@ -1,7 +1,7 @@
 import "server-only";
 import { romeDate } from "@/lib/entry/amount";
 import { addMonths, buildDashboard, monthOf, type AnalyticsTxn } from "./dashboard";
-import type { InsightTxn } from "./insights";
+import { rulesForDashboard, type InsightTxn } from "./insights";
 import { loadAll } from "./loadAll";
 
 /** Mese valido "YYYY-MM" dal parametro dell'URL, altrimenti il mese in corso a Roma. */
@@ -26,6 +26,7 @@ export async function loadDashboard(month: string) {
     budgets: all.budgets,
     month,
     today: romeDate(),
+    rules: month === monthOf(romeDate()) ? rulesForDashboard(all.rules, romeDate()) : [],
   });
-  return { dashboard, categories: all.categories, subcategories: all.subcategories, txns: all.txns };
+  return { dashboard, categories: all.categories, subcategories: all.subcategories, txns: all.txns, rules: all.rules };
 }

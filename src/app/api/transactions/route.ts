@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireOwner } from "@/lib/auth";
+import { generateRecurring } from "@/lib/analytics/loadAll";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,8 @@ export async function GET() {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
   const supabase = await createClient();
+  // Prima creo i ricorrenti dovuti, così compaiono anche nell'elenco offline.
+  await generateRecurring(supabase);
   // Supabase restituisce al massimo 1000 righe per richiesta: leggo a pagine.
   const rows: Record<string, unknown>[] = [];
   for (let from = 0; from < LIMIT; from += 1000) {

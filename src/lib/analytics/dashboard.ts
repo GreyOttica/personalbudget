@@ -25,6 +25,15 @@ export type BudgetRow = { category_id: string; valid_from: string; amount_cents:
 
 export type BudgetStatus = "none" | "ok" | "warning" | "over";
 
+/** Ricorrente automatico, visto dalla dashboard. */
+export type RuleInfo = {
+  category_id: string;
+  type: "expense" | "income" | "investment";
+  amount_cents: number;
+  /** l'addebito del mese in corso non è ancora stato creato (giorno non ancora arrivato) */
+  pendingThisMonth: boolean;
+};
+
 export type CategoryRow = {
   id: string;
   name: string;
@@ -176,8 +185,14 @@ export function buildDashboard(input: {
   budgets: BudgetRow[];
   month: string; // YYYY-MM da mostrare
   today: string; // YYYY-MM-DD a Roma
+  /** ricorrenti automatici attivi: importo mensile e se l'addebito di questo mese deve ancora arrivare */
+  rules?: RuleInfo[];
 }): Dashboard {
   const { txns, categories, subcategories, budgets, month, today } = input;
+  const rules = input.rules ?? [];
+  const rulesBy = (categoryId: string) => rules.filter((r) => r.category_id === categoryId);
+  const pendingOf = (categoryId: string) =>
+    rulesBy(categoryId).reduce((s, r) => s + (r.pendingThisMonth && r.type === "expense" ? r.amount_cents : 0), 0);
   const currentMonth = monthOf(today);
   const isCurrentMonth = month === currentMonth;
   const daysInMonth = daysIn(month);
@@ -207,6 +222,8 @@ export function buildDashboard(input: {
   const prevMonth = addMonths(month, -1);
   const avgOf = (fn: (m: string) => number) => (history.length ? history.reduce((s, m) => s + fn(m), 0) / history.length : 0);
 
+  const ruleMonthly = (categoryId: string) =>
+    rulesBy(categoryId).reduce((s, r) => s + (r.type === "expense" ? r.amount_cents : 0), 0);
   const fixedCats = new Set(categories.filter((c) => c.is_fixed && c.kind === "expense").map((c) => c.id));
   const cur = perMonth.get(month) ?? { income: 0, expense: 0, investment: 0 };
   let fixed = 0;
@@ -222,13 +239,17 @@ export function buildDashboard(input: {
       const last = spentBy.get(`${prevMonth}|${c.id}`) ?? 0;
       let forecast: number | null = null;
       if (isCurrentMonth) {
-        if (c.is_fixed) {
-          // Spesa fissa: non si proietta, si assume l'importo del mese scorso (se non già superato).
+        const covered = rulesBy(c.id).some((r) => r.type === "expense");
+        if (c.is_fixed && covered) {
+          // Spesa fissa con ricorrente automatico: già speso + addebiti che devono ancora arrivare.
+          forecast = spent + pendingOf(c.id);
+        } else if (c.is_fixed) {
+          // Spesa fissa senza ricorrente: si assume l'importo del mese scorso (se non già superato).
           forecast = Math.max(spent, last);
         } else {
           const remaining = daysInMonth - day;
           const dailyRate = (spent + (average / daysInMonth) * PRIOR_DAYS) / (day + PRIOR_DAYS);
-          forecast = Math.round(spent + dailyRate * remaining);
+          forecast = Math.round(spent + dailyRate * remaining) + pendingOf(c.id);
         }
       }
       const ratio = budget ? spent / budget : null;
@@ -243,7 +264,7 @@ export function buildDashboard(input: {
         status: statusOf(ratio, c.is_fixed),
         average,
         forecast,
-        proposal: roundUp5(c.is_fixed ? last || average : average),
+        proposal: roundUp5(ruleMonthly(c.id) || (c.is_fixed ? last || average : average)),
       };
     })
     .filter((r) => r.spent > 0 || r.budget !== null || r.average > 0)
@@ -257,7 +278,10 @@ export function buildDashboard(input: {
   if (isCurrentMonth) {
     const fFixed = rows.filter((r) => r.isFixed).reduce((s, r) => s + (r.forecast ?? 0), 0);
     const fVariable = rows.filter((r) => !r.isFixed).reduce((s, r) => s + (r.forecast ?? 0), 0);
-    const fInvest = Math.max(cur.investment, investedBy.get(prevMonth) ?? 0);
+    const investRules = rules.filter((r) => r.type === "investment");
+    const fInvest = investRules.length
+      ? cur.investment + investRules.reduce((s, r) => s + (r.pendingThisMonth ? r.amount_cents : 0), 0)
+      : Math.max(cur.investment, investedBy.get(prevMonth) ?? 0);
     forecast = {
       expense: fFixed + fVariable,
       fixed: fFixed,

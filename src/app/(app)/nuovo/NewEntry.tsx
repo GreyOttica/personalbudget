@@ -8,7 +8,7 @@ import { defaultDirection, txnType, type Category, type Direction, type Referenc
 import { formatCents } from "@/lib/format";
 import { QuickRepeat } from "@/components/QuickRepeat";
 import { useReference, useSyncState } from "@/lib/offline/hooks";
-import { saveTxn } from "@/lib/offline/sync";
+import { flush, saveTxn } from "@/lib/offline/sync";
 
 // Stesso ordine del Google Form: data, categoria, sottocategoria, importo, note, conto (Da/A), tag.
 const STEPS = ["date", "category", "subcategory", "amount", "note", "account", "tag"] as const;
@@ -41,11 +41,13 @@ export function NewEntry() {
   const [step, setStep] = useState<Step>("date");
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [saved, setSaved] = useState<TxnDraft | null>(null);
+  const [created, setCreated] = useState<Category | null>(null);
 
   if (reference === undefined) return <Shell>{null}</Shell>;
   if (reference === null) return <Shell><FirstSyncNeeded /></Shell>;
 
-  const category = reference.categories.find((c) => c.id === draft.categoryId) ?? null;
+  // Una categoria appena creata può non essere ancora nei dati locali: uso la copia tenuta a parte.
+  const category = reference.categories.find((c) => c.id === draft.categoryId) ?? (created?.id === draft.categoryId ? created : null);
   const index = STEPS.indexOf(step);
   const go = (s: Step) => setStep(s);
   const next = () => setStep(STEPS[Math.min(index + 1, STEPS.length - 1)]);
@@ -106,6 +108,7 @@ export function NewEntry() {
           categories={reference.categories}
           selected={draft.categoryId}
           onPick={(c) => {
+            if (!reference.categories.some((x) => x.id === c.id)) setCreated(c);
             // Cambiare categoria azzera la sottocategoria e reimposta entrata/uscita.
             if (c.id !== draft.categoryId) update({ categoryId: c.id, subcategory: null, direction: defaultDirection(c) });
             next();
@@ -221,6 +224,8 @@ function DateStep({ value, onPick }: { value: string; onPick: (d: string) => voi
   );
 }
 
+const EMOJI_SUGGESTIONS = ["🐶", "👶", "🎮", "📚", "🍷", "🏋️", "💊", "🎨", "🚲", "🧾", "🛠️", "🌱"];
+
 function CategoryStep({
   categories,
   selected,
@@ -230,6 +235,7 @@ function CategoryStep({
   selected: string | null;
   onPick: (c: Category) => void;
 }) {
+  const [adding, setAdding] = useState(false);
   return (
     <section className="stack">
       <h1>Categoria</h1>
@@ -242,8 +248,96 @@ function CategoryStep({
             <span>{c.name}</span>
           </button>
         ))}
+        <button type="button" className="category category-add" onClick={() => setAdding(true)} aria-expanded={adding}>
+          <span className="emoji" aria-hidden>
+            +
+          </span>
+          <span>Nuova</span>
+        </button>
       </div>
+      {adding && <NewCategory onCreated={onPick} onCancel={() => setAdding(false)} />}
     </section>
+  );
+}
+
+/** Crea una categoria quando la spesa non rientra in quelle esistenti (serve la connessione). */
+function NewCategory({ onCreated, onCancel }: { onCreated: (c: Category) => void; onCancel: () => void }) {
+  const { online } = useSyncState();
+  const [emoji, setEmoji] = useState("🏷️");
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState<Category["kind"]>("expense");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function create() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, emoji, kind }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Creazione non riuscita");
+      await flush(); // aggiorna categorie e sottocategorie sul telefono
+      onCreated(data as Category);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Creazione non riuscita");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form
+      className="card card-padded new-category"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (name.trim()) void create();
+      }}
+    >
+      <strong>Nuova categoria</strong>
+      {!online && <p className="alert">Sei offline: per creare una categoria serve la connessione.</p>}
+      <div className="new-category-row">
+        <input
+          className="emoji-input"
+          value={emoji}
+          onChange={(e) => setEmoji([...e.target.value.trim()].slice(-2).join("") || "")}
+          aria-label="Emoji"
+          maxLength={8}
+        />
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome, per esempio Animali" maxLength={40} autoFocus />
+      </div>
+      <div className="chip-list" aria-label="Emoji suggerite">
+        {EMOJI_SUGGESTIONS.map((e) => (
+          <button key={e} type="button" className={`chip chip-sm ${emoji === e ? "selected" : ""}`} onClick={() => setEmoji(e)}>
+            {e}
+          </button>
+        ))}
+      </div>
+      <div className="segmented segmented-3" role="group" aria-label="Tipo di categoria">
+        {(
+          [
+            ["expense", "Spesa"],
+            ["income", "Entrata"],
+            ["investment", "Investimento"],
+          ] as const
+        ).map(([k, label]) => (
+          <button key={k} type="button" className={kind === k ? "selected" : ""} aria-pressed={kind === k} onClick={() => setKind(k)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {error && <p className="alert">{error}</p>}
+      <div className="button-row">
+        <button type="button" className="button button-secondary" onClick={onCancel}>
+          Annulla
+        </button>
+        <button type="submit" className="button" disabled={!name.trim() || busy || !online}>
+          {busy ? "Creo…" : "Crea e usa"}
+        </button>
+      </div>
+    </form>
   );
 }
 

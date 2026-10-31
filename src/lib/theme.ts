@@ -11,7 +11,7 @@ export const THEME_MODES = [
 ] as const;
 
 export const ACCENTS = [
-  { id: "blue", label: "Blu", light: "#2167c4", dark: "#4a90e8" },
+  { id: "blue", label: "Blu", light: "#0071e3", dark: "#0a84ff" },
   { id: "violet", label: "Viola", light: "#5b48c9", dark: "#8f84ec" },
   { id: "green", label: "Verde", light: "#0b7a55", dark: "#2fb380" },
   { id: "orange", label: "Arancio", light: "#c0480f", dark: "#f07a3c" },

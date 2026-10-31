@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Meter, StatusLabel } from "@/components/Meter";
+import type { BudgetStatus } from "@/lib/analytics/dashboard";
 import { centsToInput, parseAmount } from "@/lib/entry/amount";
 import { formatEuros } from "@/lib/format";
 import { saveBudgets } from "./actions";
@@ -14,6 +16,8 @@ type Row = {
   proposal: number;
   average: number;
   spent: number;
+  forecast: number | null;
+  status: BudgetStatus;
 };
 
 const toText = (cents: number | null) => (cents ? centsToInput(cents).replace(/,00$/, "") : "");
@@ -85,10 +89,21 @@ export function BudgetEditor({ rows, months }: { rows: Row[]; months: number }) 
                   {r.isFixed && <span className="pill">fissa</span>}
                 </label>
                 <span className="muted small">
-                  media {formatEuros(r.average)}
-                  {r.proposal !== r.average && r.proposal > 0 ? ` · proposta ${formatEuros(r.proposal)}` : ""} · questo mese{" "}
-                  {formatEuros(r.spent)}
+                  questo mese <strong className="budget-spent">{formatEuros(r.spent)}</strong>
+                  {r.forecast !== null && r.forecast > r.spent ? ` · stima ${formatEuros(r.forecast)}` : ""} · media {formatEuros(r.average)}
+                  {r.proposal !== r.average && r.proposal > 0 ? ` · proposta ${formatEuros(r.proposal)}` : ""}
                 </span>
+                {r.budget !== null && (
+                  <div className="budget-meter">
+                    <Meter
+                      ratio={r.spent / r.budget}
+                      status={r.status}
+                      forecastRatio={r.forecast !== null ? r.forecast / r.budget : null}
+                      label={`${r.name}: speso ${formatEuros(r.spent)} su ${formatEuros(r.budget)}`}
+                    />
+                    {(r.status === "warning" || r.status === "over") && <StatusLabel status={r.status} />}
+                  </div>
+                )}
               </div>
               <div className={`budget-input ${bad ? "invalid" : ""}`}>
                 <input

@@ -21,6 +21,8 @@ export default async function BudgetPage() {
         proposal: r?.proposal ?? 0,
         average: r?.average ?? 0,
         spent: r?.spent ?? 0,
+        forecast: r?.forecast ?? null,
+        status: r?.status ?? ("none" as const),
       };
     })
     .sort((a, b) => b.average - a.average || a.name.localeCompare(b.name));

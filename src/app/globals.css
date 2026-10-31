@@ -9,17 +9,19 @@
    I colori delle serie non cambiano con l'accento: identificano i dati. */
 :root {
   color-scheme: light;
-  --bg: #f2f2f7;
+  --bg: #f2f2f7; /* systemGroupedBackground */
   --surface: #ffffff;
-  --surface-2: #f6f6f9;
-  --text: #111214;
-  --text-2: #3c3f45;
-  --muted: #6c707a;
-  --border: #e4e5ea;
-  --grid: #ececf0;
-  --accent-light: #2167c4;
-  --accent-dark: #4a90e8;
-  --accent: var(--accent-light);
+  --surface-2: #f2f2f7;
+  --fill: rgb(118 118 128 / 0.12); /* tertiarySystemFill: campi, segmenti, chip */
+  --text: #000000;
+  --text-2: #3c3c43;
+  --muted: #6e6e73; /* grigio di apple.com: più leggibile del secondaryLabel di iOS */
+  --border: #c6c6c8; /* separator */
+  --grid: #e5e5ea;
+  --accent-light: #0071e3;
+  --accent-dark: #0a84ff;
+  --accent: var(--accent-light); /* testi, link, selezioni */
+  --accent-fill: var(--accent); /* sfondo dei pulsanti pieni */
   --accent-text: #ffffff;
   --accent-soft: color-mix(in srgb, var(--accent) 12%, var(--surface));
   --meter-track: color-mix(in srgb, var(--accent) 18%, var(--surface));
@@ -27,19 +29,20 @@
   --series-invest: #eb6834;
   --series-income: #1baf7a;
   /* Stati (fissi, sempre con icona + testo) */
-  --good: #0ca30c;
-  --good-text: #087a08;
-  --warning: #fab219;
-  --warning-text: #8a5a00;
-  --critical: #d03b3b;
-  --critical-text: #b42f2f;
-  --danger-bg: #fdecec;
-  --warning-bg: #fff5dc;
-  --good-bg: #e7f6e7;
-  --radius: 16px;
+  --good: #34c759;
+  --good-text: #1d7a33;
+  --warning: #ff9500;
+  --warning-text: #b25000;
+  --critical: #ff3b30;
+  --critical-text: #d70015;
+  --danger-bg: #ffe9e7;
+  --warning-bg: #fff1e0;
+  --good-bg: #e5f7e9;
+  --radius: 14px;
   --radius-sm: 12px;
-  --shadow: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 8px rgb(16 24 40 / 0.04);
+  --shadow: none;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-rounded: ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif;
   --tabbar-h: 64px;
 }
 
@@ -80,23 +83,29 @@
     color-scheme: dark;
     --bg: #000000;
     --surface: #1c1c1e;
-    --surface-2: #2a2a2d;
-    --text: #f2f2f7;
+    --surface-2: #2c2c2e;
+    --fill: rgb(118 118 128 / 0.24);
+    --text: #ffffff;
     --text-2: #d1d1d6;
-    --muted: #9a9aa2;
-    --border: #2f2f33;
-    --grid: #2c2c30;
+    --muted: #98989d;
+    --border: #38383a;
+    --grid: #2c2c2e;
     --accent: var(--accent-dark);
-    --accent-text: #0b0b0c;
+    /* in scuro il pulsante pieno è un passo più profondo: testo bianco ≥ 4,5:1 */
+    --accent-fill: color-mix(in srgb, var(--accent-dark) 70%, #000);
+    --accent-text: #ffffff;
     --series-expense: #3987e5;
     --series-invest: #d95926;
     --series-income: #199e70;
-    --good-text: #4fcf4f;
-    --warning-text: #fab219;
-    --critical-text: #ff7373;
-    --danger-bg: #3a1a1a;
-    --warning-bg: #3a2c0c;
-    --good-bg: #12301a;
+    --good: #30d158;
+    --good-text: #30d158;
+    --warning: #ff9f0a;
+    --warning-text: #ff9f0a;
+    --critical: #ff453a;
+    --critical-text: #ff6961;
+    --danger-bg: #3b0f0d;
+    --warning-bg: #3a2300;
+    --good-bg: #0f2e17;
     --shadow: none;
   }
 }
@@ -105,23 +114,29 @@
     color-scheme: dark;
     --bg: #000000;
     --surface: #1c1c1e;
-    --surface-2: #2a2a2d;
-    --text: #f2f2f7;
+    --surface-2: #2c2c2e;
+    --fill: rgb(118 118 128 / 0.24);
+    --text: #ffffff;
     --text-2: #d1d1d6;
-    --muted: #9a9aa2;
-    --border: #2f2f33;
-    --grid: #2c2c30;
+    --muted: #98989d;
+    --border: #38383a;
+    --grid: #2c2c2e;
     --accent: var(--accent-dark);
-    --accent-text: #0b0b0c;
+    /* in scuro il pulsante pieno è un passo più profondo: testo bianco ≥ 4,5:1 */
+    --accent-fill: color-mix(in srgb, var(--accent-dark) 70%, #000);
+    --accent-text: #ffffff;
     --series-expense: #3987e5;
     --series-invest: #d95926;
     --series-income: #199e70;
-    --good-text: #4fcf4f;
-    --warning-text: #fab219;
-    --critical-text: #ff7373;
-    --danger-bg: #3a1a1a;
-    --warning-bg: #3a2c0c;
-    --good-bg: #12301a;
+    --good: #30d158;
+    --good-text: #30d158;
+    --warning: #ff9f0a;
+    --warning-text: #ff9f0a;
+    --critical: #ff453a;
+    --critical-text: #ff6961;
+    --danger-bg: #3b0f0d;
+    --warning-bg: #3a2300;
+    --good-bg: #0f2e17;
     --shadow: none;
 }
 
@@ -323,7 +338,7 @@ button:disabled {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--accent-text);
   box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 40%, transparent);
   transform: translateY(-6px);
@@ -372,7 +387,7 @@ input[aria-invalid="true"] {
   min-height: 50px;
   border: 0;
   border-radius: var(--radius-sm);
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--accent-text);
   text-decoration: none;
 }
@@ -484,7 +499,7 @@ input[aria-invalid="true"] {
 }
 
 .chip.selected {
-  background: var(--accent);
+  background: var(--accent-fill);
   border-color: var(--accent);
   color: var(--accent-text);
 }
@@ -2346,4 +2361,463 @@ html {
   font-weight: 700;
   font-size: 0.85rem;
   white-space: nowrap;
+}
+
+/* ==========================================================================
+   Stile Apple: elenchi raggruppati piatti, separatori sottili rientrati,
+   titoli grandi, campi senza bordo, cifre in SF Pro Rounded.
+   Queste regole vengono dopo e affinano quelle sopra.
+   ========================================================================== */
+
+body {
+  letter-spacing: -0.01em;
+}
+
+h1 {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.12;
+}
+
+h2 {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.section-head {
+  padding: 0 2px;
+}
+
+.group-title {
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--muted);
+  margin: 14px 16px -6px;
+}
+
+.group-note {
+  margin: -4px 16px 0;
+}
+
+/* Cifre grandi arrotondate, come in Wallet e Salute */
+.hero-value,
+.tile-value,
+.today-value,
+.small-total,
+.saved-amount,
+.goal-pct,
+.donut-center strong,
+.hero-forecast strong,
+.budget-footer strong {
+  font-family: var(--font-rounded);
+  letter-spacing: -0.01em;
+}
+
+.hero-value {
+  font-size: 52px;
+  font-weight: 700;
+}
+
+.hero-label,
+.tile-label {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.card,
+.tile,
+.choice,
+.category,
+.theme-option,
+.quick-item,
+.month-arrow {
+  box-shadow: none;
+}
+
+/* Elenchi raggruppati: separatore sottile che parte dal testo, non dal bordo */
+.cat-row,
+.txn-list li,
+.menu li,
+.budget-row,
+.trend-row,
+.list-row,
+.alert-row {
+  position: relative;
+}
+
+.cat-row + .cat-row,
+.txn-list li + li,
+.menu li + li,
+.budget-row + .budget-row,
+.trend-row + .trend-row,
+.list-row + .list-row,
+.list-row + .list-form,
+.list-form + .list-row,
+.alert-row + .alert-row {
+  border-top: 0;
+}
+
+.cat-row + .cat-row::before,
+.txn-list li + li::before,
+.menu li + li::before,
+.budget-row + .budget-row::before,
+.trend-row + .trend-row::before,
+.list-row + .list-row::before,
+.list-row + .list-form::before,
+.list-form + .list-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 62px;
+  border-top: 0.5px solid var(--border);
+}
+
+.alert-row + .alert-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 46px;
+  border-top: 0.5px solid var(--border);
+}
+
+.cat-emoji,
+.menu-icon,
+.txn-row .emoji {
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  font-size: 1.2rem;
+}
+
+/* Campi: sfondo grigio di sistema, nessun bordo; bordo d'accento solo al focus */
+input,
+select {
+  border: 1px solid transparent;
+  background: var(--fill);
+  border-radius: 10px;
+}
+
+.card input,
+.card select,
+.list input,
+.list select {
+  background: var(--fill);
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+input[aria-invalid="true"] {
+  border-color: var(--critical);
+}
+
+.amount-input input {
+  background: var(--surface);
+}
+
+.search {
+  border-radius: 10px;
+}
+
+/* Pulsanti */
+.button {
+  border-radius: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.button-secondary,
+.button-tinted {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.button-compact {
+  min-height: 32px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  border-radius: 999px;
+  flex: none;
+}
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--fill);
+  color: var(--accent);
+  flex: none;
+}
+
+.danger-link {
+  color: var(--critical-text);
+  text-align: center;
+}
+
+/* Chip e segmenti */
+.chip {
+  border: 0;
+  background: var(--fill);
+}
+
+.chip-add {
+  border: 0;
+  color: var(--accent);
+}
+
+.segmented {
+  background: var(--fill);
+  border-radius: 9px;
+  padding: 2px;
+}
+
+.segmented button {
+  border-radius: 7px;
+  font-weight: 500;
+  font-size: 0.8rem;
+}
+
+.segmented button.selected {
+  font-weight: 600;
+  box-shadow: 0 3px 8px rgb(0 0 0 / 0.12), 0 3px 1px rgb(0 0 0 / 0.04);
+}
+
+/* Interruttore iOS */
+.switch {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 51px;
+  height: 31px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--fill);
+  transition: background 0.2s;
+  flex: none;
+  cursor: pointer;
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 3px 8px rgb(0 0 0 / 0.15), 0 1px 1px rgb(0 0 0 / 0.16);
+  transition: transform 0.2s;
+}
+
+.switch:checked {
+  background: var(--good);
+}
+
+.switch:checked::after {
+  transform: translateX(20px);
+}
+
+.switch:focus {
+  border-color: transparent;
+  background: var(--fill);
+}
+
+.switch:checked:focus {
+  background: var(--good);
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Barra in basso: sobria, "+" pieno senza ombra né rialzo */
+.tabbar {
+  border-top: 0.5px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+}
+
+.tab {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.tab-add-circle {
+  width: 44px;
+  height: 44px;
+  box-shadow: none;
+  transform: none;
+}
+
+.sync-badge {
+  font-size: 12px;
+  padding: 4px 9px;
+}
+
+/* Barra di avanzamento iOS: sottile, angoli pieni */
+.meter {
+  height: 6px;
+}
+
+.status {
+  font-weight: 600;
+}
+
+/* Categoria nuova nell'inserimento */
+.category-add {
+  background: transparent;
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+}
+
+.category-add .emoji {
+  font-size: 1.6rem;
+  font-weight: 300;
+}
+
+.new-category-row {
+  display: flex;
+  gap: 8px;
+}
+
+.emoji-input {
+  width: 56px;
+  flex: none;
+  text-align: center;
+  font-size: 1.4rem;
+  padding: 8px;
+}
+
+/* --- elenchi generici (ricorrenti, saldo) -------------------------------------- */
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  min-height: 56px;
+}
+
+.list-row.inactive {
+  opacity: 0.55;
+}
+
+.list-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.list-amount {
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.list-form {
+  position: relative;
+  padding: 14px 16px;
+}
+
+.list-action {
+  font: inherit;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  text-align: left;
+}
+
+.rule-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.form-row .field-day {
+  max-width: 110px;
+}
+
+.form-row:has(.field-day) {
+  grid-template-columns: 1fr 110px;
+}
+
+.checkpoints {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 10px 0 0;
+  border-top: 0.5px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.checkpoints li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.checkpoints li span {
+  flex: 1;
+}
+
+.check-diff {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.budget-meter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.budget-meter .meter {
+  flex: 1;
+}
+
+.budget-spent {
+  color: var(--text);
 }

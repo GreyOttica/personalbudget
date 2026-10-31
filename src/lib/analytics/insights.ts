@@ -225,29 +225,124 @@ export function recurring(
 // --- saldo del conto ----------------------------------------------------------------------
 
 export type BalancePoint = { month: string; balance: number; net: number };
+export type Checkpoint = { as_of: string; balance_cents: number };
+
+const netOf = (t: InsightTxn) => (t.type === "income" ? t.amount_cents : -t.amount_cents);
 
 /**
- * Saldo stimato a fine mese: saldo iniziale + entrate − spese − investimenti
- * (i versamenti escono dal conto verso il broker).
+ * Saldo a fine mese: entrate − spese − investimenti (i versamenti escono dal conto).
+ * Il punto di partenza è l'ultimo saldo reale inserito a mano (a fine giornata) se c'è,
+ * altrimenti il saldo iniziale dell'import. Prima e dopo quel punto il saldo si ricava
+ * togliendo o aggiungendo i movimenti, così la linea è coerente con il valore vero.
  */
-export function balanceHistory(txns: InsightTxn[], today: string): { points: BalancePoint[]; opening: { date: string; amount: number } | null; current: number } {
-  const opening = txns.filter((t) => t.type === "opening_balance").sort((a, b) => a.occurred_on.localeCompare(b.occurred_on))[0];
+export function balanceHistory(
+  txns: InsightTxn[],
+  today: string,
+  checkpoints: Checkpoint[] = [],
+): {
+  points: BalancePoint[];
+  opening: { date: string; amount: number } | null;
+  current: number;
+  anchor: { kind: "checkpoint" | "opening" | "none"; date: string | null; amount: number };
+  /** per l'ultimo saldo reale: quanto diceva la stima prima della correzione */
+  lastCheck: { date: string; actual: number; estimated: number; difference: number } | null;
+} {
+  const opening = txns.filter((t) => t.type === "opening_balance").sort((a, b) => a.occurred_on.localeCompare(b.occurred_on))[0] ?? null;
   const rest = txns.filter((t) => t.type !== "opening_balance");
-  if (!rest.length && !opening) return { points: [], opening: null, current: 0 };
-  const first = opening ? monthOf(opening.occurred_on) : rest.reduce((m, t) => (monthOf(t.occurred_on) < m ? monthOf(t.occurred_on) : m), monthOf(today));
-  const net = new Map<string, number>();
-  for (const t of rest) {
-    const m = monthOf(t.occurred_on);
-    const sign = t.type === "income" ? 1 : -1;
-    net.set(m, (net.get(m) ?? 0) + sign * t.amount_cents);
-  }
-  let balance = opening?.amount_cents ?? 0;
-  const points = monthsBetween(first, monthOf(today)).map((m) => {
-    const n = net.get(m) ?? 0;
-    balance += n;
-    return { month: m, balance, net: n };
+  const checks = [...checkpoints].filter((c) => c.as_of <= today).sort((a, b) => a.as_of.localeCompare(b.as_of));
+  const last = checks[checks.length - 1] ?? null;
+
+  // Stima "pura" dal saldo iniziale, per misurare di quanto sbagliava.
+  const fromOpening = (date: string) =>
+    (opening?.amount_cents ?? 0) + rest.filter((t) => (!opening || t.occurred_on >= opening.occurred_on) && t.occurred_on <= date).reduce((s, t) => s + netOf(t), 0);
+
+  const anchor = last
+    ? { kind: "checkpoint" as const, date: last.as_of, amount: last.balance_cents }
+    : opening
+      ? { kind: "opening" as const, date: opening.occurred_on, amount: opening.amount_cents }
+      : { kind: "none" as const, date: null, amount: 0 };
+
+  // Saldo a fine giornata di una data qualsiasi, a partire dall'ancora.
+  const balanceAt = (date: string) => {
+    if (anchor.date === null) return rest.filter((t) => t.occurred_on <= date).reduce((s, t) => s + netOf(t), 0);
+    // per il saldo iniziale dell'import, i movimenti dello stesso giorno vengono dopo
+    const after = (t: InsightTxn) => (anchor.kind === "opening" ? t.occurred_on >= anchor.date! : t.occurred_on > anchor.date!);
+    if (date >= anchor.date) return anchor.amount + rest.filter((t) => after(t) && t.occurred_on <= date).reduce((s, t) => s + netOf(t), 0);
+    // prima dell'ancora: tolgo i movimenti tra la data e l'ancora (quelli già compresi nel saldo dell'ancora)
+    return anchor.amount - rest.filter((t) => t.occurred_on > date && !after(t)).reduce((s, t) => s + netOf(t), 0);
+  };
+
+  if (!rest.length && !opening && !last) return { points: [], opening: null, current: 0, anchor, lastCheck: null };
+  const firstDate = [opening?.occurred_on, rest[0] ? rest.reduce((m, t) => (t.occurred_on < m ? t.occurred_on : m), rest[0].occurred_on) : undefined]
+    .filter((d): d is string => !!d)
+    .sort()[0] ?? today;
+  let prevBalance: number | null = null;
+  const points = monthsBetween(monthOf(firstDate), monthOf(today)).map((m) => {
+    const end = m === monthOf(today) ? today : addDays(`${addMonths(m, 1)}-01`, -1);
+    const balance = balanceAt(end);
+    const net = prevBalance === null ? rest.filter((t) => monthOf(t.occurred_on) === m).reduce((s, t) => s + netOf(t), 0) : balance - prevBalance;
+    prevBalance = balance;
+    return { month: m, balance, net };
   });
-  return { points, opening: opening ? { date: opening.occurred_on, amount: opening.amount_cents } : null, current: balance };
+
+  return {
+    points,
+    opening: opening ? { date: opening.occurred_on, amount: opening.amount_cents } : null,
+    current: balanceAt(today),
+    anchor,
+    lastCheck: last
+      ? { date: last.as_of, actual: last.balance_cents, estimated: fromOpening(last.as_of), difference: last.balance_cents - fromOpening(last.as_of) }
+      : null,
+  };
+}
+
+// --- ricorrenti automatici -------------------------------------------------------------
+
+export type RecurringRule = {
+  id: string;
+  name: string;
+  type: "expense" | "income" | "investment";
+  amount_cents: number;
+  category_id: string;
+  subcategory_id: string | null;
+  account_id: string | null;
+  note: string | null;
+  day_of_month: number;
+  starts_on: string;
+  active: boolean;
+};
+
+/** Data dell'addebito di una regola in un mese (il 31 nei mesi corti diventa l'ultimo giorno). */
+export function occurrenceIn(rule: Pick<RecurringRule, "day_of_month">, month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return `${month}-${String(Math.min(rule.day_of_month, last)).padStart(2, "0")}`;
+}
+
+/** Prossimo addebito da oggi (compreso) in poi, rispettando la data di inizio. */
+export function nextOccurrence(rule: Pick<RecurringRule, "day_of_month" | "starts_on">, today: string): string {
+  let m = monthOf(today > rule.starts_on ? today : rule.starts_on);
+  for (let i = 0; i < 24; i++, m = addMonths(m, 1)) {
+    const d = occurrenceIn(rule, m);
+    if (d >= today && d >= rule.starts_on) return d;
+  }
+  return rule.starts_on;
+}
+
+/** Regole attive viste dalla dashboard: l'addebito di questo mese è ancora da arrivare? */
+export function rulesForDashboard(rules: RecurringRule[], today: string) {
+  const month = monthOf(today);
+  return rules
+    .filter((r) => r.active)
+    .map((r) => {
+      const d = occurrenceIn(r, month);
+      return {
+        category_id: r.category_id,
+        type: r.type,
+        amount_cents: r.amount_cents,
+        pendingThisMonth: d > today && d >= r.starts_on,
+      };
+    });
 }
 
 // --- andamento per categoria ------------------------------------------------------------

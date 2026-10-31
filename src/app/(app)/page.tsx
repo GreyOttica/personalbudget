@@ -80,7 +80,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
             </div>
             <VersusUsual rows={d.categories} isCurrentMonth={d.isCurrentMonth} months={d.averages.months} />
           </section>
-          <CategoryBudgets d={d} />
           <section className="section">
             <div className="section-head">
               <h2>Piccole spese che si sommano</h2>
@@ -154,8 +153,8 @@ function Hero({ d, monthName }: { d: Dashboard; monthName: string }) {
             </div>
           </div>
           <p className="muted small hero-note">
-            Fisse {formatEuros(forecast.fixed)} (come il mese scorso, non proiettate) + variabili {formatEuros(forecast.variable)}{" "}
-            (ritmo attuale corretto con la tua media).
+            Fisse {formatEuros(forecast.fixed)} (ricorrenti o, se mancano, come il mese scorso: non proiettate) + variabili{" "}
+            {formatEuros(forecast.variable)} (ritmo attuale corretto con la tua media).
           </p>
         </>
       )}
@@ -232,82 +231,9 @@ function Alerts({ d }: { d: Dashboard }) {
         </div>
       ))}
       {hidden > 0 && (
-        <a href="#budget-categorie" className="alerts-more small">
+        <Link href="/budget" className="alerts-more small">
           e {hidden === 1 ? "un altro avviso" : `altri ${hidden} avvisi`} ›
-        </a>
-      )}
-    </section>
-  );
-}
-
-function CategoryRowItem({ c, showAverage }: { c: Dashboard["categories"][number]; showAverage: boolean }) {
-  return (
-    <li className="cat-row">
-      <span className="cat-emoji" aria-hidden>
-        {c.emoji}
-      </span>
-      <div className="cat-main">
-        <div className="cat-line">
-          <span className="cat-name">
-            {c.name}
-            {c.isFixed && <span className="pill">fissa</span>}
-          </span>
-          <span className="cat-amount">
-            {formatEuros(c.spent)}
-            {c.budget !== null && <span className="muted"> / {formatEuros(c.budget)}</span>}
-          </span>
-        </div>
-        {c.budget !== null && (
-          <Meter
-            ratio={c.ratio ?? 0}
-            status={c.status}
-            forecastRatio={c.forecast !== null ? c.forecast / c.budget : null}
-            label={`${c.name}: ${formatPercent(c.ratio ?? 0)} del budget`}
-          />
-        )}
-        <div className="cat-sub muted small">
-          {c.budget !== null && c.status !== "ok" && <StatusLabel status={c.status} />}
-          {c.forecast !== null && c.forecast > c.spent && <span>stima {formatEuros(c.forecast)}</span>}
-          {showAverage && <span>media {formatEuros(c.average)}</span>}
-        </div>
-      </div>
-    </li>
-  );
-}
-
-function CategoryBudgets({ d }: { d: Dashboard }) {
-  // In vista le categorie con spese nel mese; le altre (budget ancora intatto) a richiesta.
-  const active = d.categories.filter((c) => c.spent > 0);
-  const quiet = d.categories.filter((c) => c.spent === 0 && c.budget !== null);
-  const showAverage = d.averages.months > 0;
-  return (
-    <section className="section" id="budget-categorie">
-      <div className="section-head">
-        <h2>Budget per categoria</h2>
-        <Link href="/budget" className="small">
-          Modifica
         </Link>
-      </div>
-      {active.length === 0 ? (
-        <p className="muted">Nessuna spesa in questo mese.</p>
-      ) : (
-        <ul className="card cat-list">
-          {active.map((c) => (
-            <CategoryRowItem key={c.id} c={c} showAverage={showAverage} />
-          ))}
-        </ul>
-      )}
-      {quiet.length > 0 && (
-        <details className="more-cats">
-          <summary>
-            {quiet.length === 1 ? "Un'altra categoria" : `Altre ${quiet.length} categorie`} senza spese questo mese
-          </summary>
-          <ul className="card cat-list">
-            {quiet.map((c) => (
-              <CategoryRowItem key={c.id} c={c} showAverage={showAverage} />
-            ))}
-          </ul>
-        </details>
       )}
     </section>
   );

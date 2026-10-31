@@ -13,7 +13,9 @@ Riferimento visivo dell'app. Le schermate in [`docs/design/`](design/) usano **d
 3. **I numeri li calcola il codice.** Grafici e riquadri mostrano valori calcolati in
    `src/lib/analytics/dashboard.ts` (testati), mai stime dell'interfaccia.
 4. **Lo stato non è mai solo un colore.** "Superato" e "Oltre l'80%" hanno sempre icona e testo.
-5. **Stile iOS.** Sfondo grigio raggruppato, card bianche con raggio 16px, barra in basso traslucida,
+5. **Stile Apple.** Colori di sistema iOS (blu `#0071e3`/`#0a84ff`, verde, arancio, rosso), elenchi raggruppati
+   piatti senza ombre con separatori sottili rientrati, titoli grandi da 34px, cifre grandi in SF Pro Rounded,
+   campi senza bordo su sfondo grigio di sistema, interruttori e segmenti iOS, barra in basso traslucida,
    aree di tocco ≥ 44px, testo a 17px (iOS non ingrandisce i campi).
 
 ## Struttura
@@ -21,9 +23,12 @@ Riferimento visivo dell'app. Le schermate in [`docs/design/`](design/) usano **d
 | Area | Contenuto |
 |---|---|
 | Barra in basso | Home · Movimenti · **+** · Budget · Altro (nascosta durante l'inserimento) |
-| Home | Mese (‹ ›) → spese del mese + budget + stima → riquadri Entrate / Investito / Risparmio → avvisi (max 3) → **Giorno per giorno** → **Dove vanno i soldi** (ciambella, tocco = sottocategorie) → **Rispetto al solito** → budget per categoria → **Piccole spese** → **Flusso del mese** (Sankey) → andamento 12 mesi |
+| Home | Mese (‹ ›) → spese del mese + budget + stima → riquadri Entrate / Investito / Risparmio → avvisi (max 3, link al Budget) → **Giorno per giorno** → **Dove vanno i soldi** (ciambella, tocco = sottocategorie) → **Rispetto al solito** → **Piccole spese** → **Flusso del mese** (Sankey) → andamento 12 mesi |
 | Giorno per giorno | "Oggi" e quanto puoi spendere al giorno · Ritmo (spese variabili accumulate vs ritmo del budget) · Calendario (giorni colorati per spesa) · Giorni (colonne, con/senza fisse) · Settimana (media per giorno della settimana) |
-| Nuovo movimento | "Ripeti in un tocco" (spese identiche ≥ 3 volte in 90 giorni, ≤ 100 €, niente fisse) → questionario a passi |
+| Nuovo movimento | "Ripeti in un tocco" (spese identiche ≥ 3 volte in 90 giorni, ≤ 100 €, niente fisse) → questionario a passi; nel passo Categoria "+ Nuova" crea una categoria (emoji, nome, tipo) |
+| Budget | Per categoria: speso, barra con stato e stima, media, proposta e campo dell'importo |
+| Ricorrenti | Automatici (✏️ importo, giorno, categoria, pausa) · riconosciuti nello storico con "Automatico" · "+ Nuovo ricorrente" |
+| Saldo del conto | Saldo stimato dall'ultimo saldo reale · ✏️ "Correggi con il saldo reale" e differenza rispetto alla stima |
 | Movimenti | Ricerca, tipo (segmented), mese, categoria, tag, totali della selezione, raggruppati per giorno |
 | Budget | Proposta (media 6 mesi, fisse = mese scorso) e un campo per categoria, barra "Salva" sempre visibile |
 | Altro | Impostazioni · **Analisi**: anno, saldo del conto, categorie nel tempo, ricorrenti e abbonamenti, viaggi ed eventi, obiettivi · export CSV, import, account |

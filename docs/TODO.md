@@ -1,4 +1,11 @@
-# Da fare (prossima sessione)
+# Da fare
+
+✅ Fatto il 31/10/2026: ricorrenti automatici con matita (`/ricorrenti`) e saldo reale con matita (`/saldo`).
+Prossimo: Fase 4 (analisi AI e chat).
+
+---
+
+# Storico delle richieste
 
 Richieste del 31/10/2026, da riprendere prima della Fase 4 (analisi AI).
 

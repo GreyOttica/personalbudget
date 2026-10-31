@@ -28,6 +28,7 @@ scripts/import-sheet.ts import da riga di comando (alternativa alla pagina /impo
    - [`20261030000002_seed_import_summary.sql`](supabase/migrations/20261030000002_seed_import_summary.sql)
    - [`20261031000003_entry_sync.sql`](supabase/migrations/20261031000003_entry_sync.sql) (Fase 2)
    - [`20261031000004_goals.sql`](supabase/migrations/20261031000004_goals.sql) (obiettivi di risparmio)
+   - [`20261101000005_recurring_balance.sql`](supabase/migrations/20261101000005_recurring_balance.sql) (ricorrenti automatici e saldo reale)
 3. **Authentication → Emails → Templates → Magic Link**: sostituisci il corpo del messaggio con
    `<p>Il tuo codice di accesso: <strong>{{ .Token }}</strong></p>` e salva.
    L'app usa il codice e non il link, perché su iPhone il link si aprirebbe in Safari e non nella PWA.

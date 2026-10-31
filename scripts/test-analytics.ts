@@ -307,3 +307,64 @@ test("obiettivi e spese da ripetere", () => {
   assert.equal(r[0].count, 3, "oltre 90 giorni non conta");
   assert.equal(r[0].note, "Caffè");
 });
+
+// --- ricorrenti automatici e saldo corretto ------------------------------------
+import { nextOccurrence, occurrenceIn, rulesForDashboard, type RecurringRule } from "../src/lib/analytics/insights.ts";
+
+test("saldo con un saldo reale inserito a mano", () => {
+  const txns: InsightTxn[] = [
+    x("2025-12-24", "opening_balance", 3000, "altro"),
+    x("2026-01-10", "income", 2000, "pay"),
+    x("2026-01-20", "expense", 500, "bar"),
+    x("2026-02-05", "expense", 100, "bar"),
+    x("2026-02-10", "income", 2000, "pay"),
+  ];
+  // Senza correzioni: 3000 → 4500 a gennaio → 6400 a febbraio
+  const plain = balanceHistory(txns, "2026-02-28");
+  assert.equal(plain.current, 640000);
+  assert.equal(plain.anchor.kind, "opening");
+  // Il conto vero il 31/01 era 4.300 (200 € di spese non registrate).
+  const fixed = balanceHistory(txns, "2026-02-28", [{ as_of: "2026-01-31", balance_cents: 430000 }]);
+  assert.equal(fixed.anchor.kind, "checkpoint");
+  assert.equal(fixed.current, 430000 - 10000 + 200000, "dopo il saldo reale si aggiungono solo i movimenti successivi");
+  assert.deepEqual(fixed.points.map((p) => [p.month, p.balance]), [
+    ["2025-12", 280000],
+    ["2026-01", 430000],
+    ["2026-02", 620000],
+  ]);
+  assert.deepEqual(fixed.lastCheck, { date: "2026-01-31", actual: 430000, estimated: 450000, difference: -20000 });
+  // I movimenti del giorno stesso del saldo reale sono già compresi nel saldo.
+  const sameDay = balanceHistory([...txns, x("2026-01-31", "expense", 50, "bar")], "2026-01-31", [{ as_of: "2026-01-31", balance_cents: 430000 }]);
+  assert.equal(sameDay.current, 430000);
+});
+
+test("ricorrenti automatici: date, prossimo addebito, stima di fine mese", () => {
+  const rule: RecurringRule = {
+    id: "r1", name: "Affitto", type: "expense", amount_cents: 95000, category_id: "rent", subcategory_id: null,
+    account_id: null, note: null, day_of_month: 31, starts_on: "2026-11-01", active: true,
+  };
+  assert.equal(occurrenceIn(rule, "2027-02"), "2027-02-28");
+  assert.equal(occurrenceIn(rule, "2026-11"), "2026-11-30");
+  assert.equal(nextOccurrence(rule, "2026-10-31"), "2026-11-30", "non prima della data di inizio");
+  assert.equal(nextOccurrence({ ...rule, day_of_month: 15, starts_on: "2026-01-01" }, "2026-10-20"), "2026-11-15");
+
+  const rent15 = { ...rule, day_of_month: 15, starts_on: "2026-01-15" };
+  const before = rulesForDashboard([rent15], "2026-10-10");
+  assert.equal(before[0].pendingThisMonth, true);
+  assert.equal(rulesForDashboard([rent15], "2026-10-15")[0].pendingThisMonth, false, "il giorno stesso è già creato");
+  assert.equal(rulesForDashboard([{ ...rent15, active: false }], "2026-10-10").length, 0);
+
+  // Dashboard: l'affitto aumenta a 950 € e non è ancora arrivato → la stima usa 950, non i 900 del mese scorso.
+  const d = buildDashboard({
+    txns: [t("2026-09-15", "expense", 900, "rent"), t("2026-10-02", "expense", 10, "bar")],
+    categories: cats,
+    subcategories: [],
+    budgets: [],
+    month: "2026-10",
+    today: "2026-10-10",
+    rules: before,
+  });
+  const r = d.categories.find((c) => c.id === "rent")!;
+  assert.equal(r.forecast, 95000);
+  assert.equal(r.proposal, 95000, "la proposta di budget segue il ricorrente");
+});

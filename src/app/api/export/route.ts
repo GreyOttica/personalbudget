@@ -81,7 +81,7 @@ export async function GET() {
         r.note,
         r.account_id ? accName.get(r.account_id) : "",
         r.tag,
-        r.source === "import" ? "Google Sheet" : "App",
+        r.source === "import" ? "Google Sheet" : r.source === "recurring" ? "Automatico" : "App",
         r.created_at,
         r.updated_at,
         r.id,
