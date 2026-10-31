@@ -73,7 +73,7 @@ export function AnalysisCard({ a, compact = false }: { a: AnalysisRow; compact?:
             </p>
           )}
           <p className="muted small analysis-foot">
-            {new Date(a.created_at).toLocaleString("it-IT", { timeZone: "Europe/Rome", dateStyle: "short", timeStyle: "short" })} · {a.model} · ${Number(a.cost_usd).toFixed(3)}
+            {new Date(a.created_at).toLocaleString("it-IT", { timeZone: "Europe/Rome", dateStyle: "short", timeStyle: "short" })} · {a.model} · {a.model.startsWith("gemini") ? "gratis" : `$${Number(a.cost_usd).toFixed(3)}`}
           </p>
         </>
       )}

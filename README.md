@@ -57,8 +57,7 @@ scripts/import-sheet.ts import da riga di comando (alternativa alla pagina /impo
    | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | publishable key (`sb_publishable_…`) |
    | `SUPABASE_SECRET_KEY` | secret key (`sb_secret_…`) |
    | `OWNER_EMAIL` | la tua email |
-   | `ANTHROPIC_API_KEY` | chiave API Anthropic (`sk-ant-…`), segna la variabile come **Sensitive** |
-   | `ANTHROPIC_MODEL` | facoltativa, default `claude-opus-5-5` |
+   | `GEMINI_API_KEY` | chiave gratuita di Google AI Studio (`AIza…`), segna la variabile come **Sensitive** |
 
 4. **Deploy**. Dopo un paio di minuti ottieni un indirizzo tipo `https://personalbudget-xxxx.vercel.app`.
 5. Su Supabase, **Authentication → URL Configuration → Site URL**: incolla quell'indirizzo e salva.
@@ -101,15 +100,25 @@ L'app installata ha una memoria separata da Safari, quindi al primo avvio chiede
 
 ## Analisi AI e chat (Fase 4)
 
-- La chiave Anthropic si crea su [console.anthropic.com](https://console.anthropic.com) → **API Keys**, e va solo su
-  Vercel: l'app la usa lato server, il telefono non la vede mai. Imposta un limite di spesa mensile in **Billing → Limits**.
+L'AI di default è **Google Gemini, piano gratuito**. In alternativa si può usare Claude di Anthropic (a pagamento).
+
+| Variabile su Vercel | Cosa fa |
+|---|---|
+| `GEMINI_API_KEY` | chiave di [aistudio.google.com](https://aistudio.google.com) → **Get API key**, gratuita, senza carta |
+| `GEMINI_MODEL` | facoltativa; default `gemini-flash-latest` (sempre l'ultimo Flash). Se la quota finisce l'app prova `gemini-flash-lite-latest` |
+| `AI_PROVIDER` | facoltativa: `gemini` o `anthropic`. Se manca usa quella di cui c'è la chiave (Gemini se ci sono entrambe) |
+| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | solo per usare Claude; modello di default `claude-opus-5-5` |
+
+- Le chiavi restano su Vercel: l'app le usa lato server, il telefono non le vede mai.
+- Sul piano gratuito Google può usare i dati inviati per migliorare i suoi servizi. All'AI arrivano totali e medie
+  (analisi) e, in chat, i movimenti che servono a rispondere.
 - **Altro → Analisi**: serale (oggi e mese in corso), settimanale (lunedì–domenica scorsi), mensile (mese scorso).
   Tutti i numeri sono calcolati dall'app in `src/lib/ai/facts.ts`; l'AI riceve solo quei totali, li commenta e sceglie
   al massimo 3 consigli tra "leve" già calcolate in euro. Ogni cifra del testo viene confrontata con i dati: se ne
   compare una che non esiste, l'analisi lo segnala.
 - **Altro → Chiedi all'assistente**: domande libere; l'AI consulta i dati con strumenti (riepilogo mese, andamento,
   categoria, movimenti, proiezione del saldo, ricorrenti e obiettivi, piccole spese).
-- Il costo di ogni chiamata è salvato e mostrato in **Analisi → Costo AI**, con la stima mensile.
+- Il collegamento all'AI è in `src/lib/ai/gemini.ts` e `src/lib/ai/anthropic.ts`, dietro `src/lib/ai/llm.ts`.
 - Le analisi automatiche (21:30, lunedì e il primo del mese alle 8:00) arrivano con la Fase 5; per ora si generano con i pulsanti.
 
 ## Regole di classificazione dello storico

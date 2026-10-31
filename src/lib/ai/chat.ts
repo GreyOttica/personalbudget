@@ -1,22 +1,26 @@
 import "server-only";
-import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
-import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { addMonths, monthOf } from "@/lib/analytics/dashboard";
 import { categoryTrends, recurring, smallSpends } from "@/lib/analytics/insights";
 import { loadAll } from "@/lib/analytics/loadAll";
 import { romeDate } from "@/lib/entry/amount";
 import { createClient } from "@/lib/supabase/server";
-import { addUsage, anthropic, costUsd, emptyUsage, FALLBACK, MODEL } from "./client";
+import { costUsd } from "./client";
+import { toolChat, type ChatTurn, type ToolDef } from "./llm";
 import { monthFacts, projection, type FactsInput } from "./facts";
 import { CHAT_SYSTEM } from "./prompts";
 import { isMissingObject } from "@/lib/supabase/missing";
 
 const HISTORY = 12; // messaggi precedenti inviati all'AI: abbastanza per il contesto, pochi token
 const eur = (c: number) => Math.round(c / 100);
+/** Strumento tipizzato: l'input arriva già validato dallo schema. */
+function tool<S extends z.ZodObject>(def: { name: string; description: string; inputSchema: S; run: (input: z.infer<S>) => Promise<string> }): ToolDef {
+  return { name: def.name, description: def.description, schema: def.inputSchema, run: (input) => def.run(input as z.infer<S>) };
+}
+
 const MONTH = z.string().regex(/^\d{4}-\d{2}$/).describe("Mese nel formato AAAA-MM");
 
-function tools(input: FactsInput) {
+function tools(input: FactsInput): ToolDef[] {
   const current = monthOf(input.today);
   const cat = new Map(input.categories.map((c) => [c.id, c]));
   const sub = new Map(input.subcategories.map((s) => [s.id, s]));
@@ -32,13 +36,13 @@ function tools(input: FactsInput) {
   };
 
   return [
-    betaZodTool({
+    tool({
       name: "riepilogo_mese",
       description: "Riepilogo di un mese: entrate, spese (fisse e variabili), investito, risparmio, stima di fine mese se in corso, budget e categorie con media.",
       inputSchema: z.object({ mese: MONTH.optional().describe("Default: mese in corso") }),
       run: async ({ mese }) => json(strip(monthFacts(input, mese && mese <= current ? mese : current))),
     }),
-    betaZodTool({
+    tool({
       name: "andamento",
       description: "Entrate, spese, investito e percentuale di risparmio mese per mese.",
       inputSchema: z.object({ mesi: z.number().int().min(1).max(24).optional().describe("Quanti mesi indietro, default 6") }),
@@ -53,7 +57,7 @@ function tools(input: FactsInput) {
         );
       },
     }),
-    betaZodTool({
+    tool({
       name: "categoria",
       description: "Una categoria di spesa: importo mese per mese negli ultimi 12 mesi, media, e sottocategorie del mese in corso.",
       inputSchema: z.object({ nome: z.string().describe("Nome della categoria, per esempio Supermercato") }),
@@ -76,7 +80,7 @@ function tools(input: FactsInput) {
         });
       },
     }),
-    betaZodTool({
+    tool({
       name: "cerca_movimenti",
       description: "Cerca movimenti per periodo, categoria, testo nella nota o sottocategoria, tipo e importo minimo. Restituisce totale, numero e fino a 40 righe.",
       inputSchema: z.object({
@@ -114,14 +118,14 @@ function tools(input: FactsInput) {
         });
       },
     }),
-    betaZodTool({
+    tool({
       name: "proiezione",
       description:
         "Saldo previsto del conto a fine di un mese futuro, dal risparmio netto medio dei mesi completi. Con 'spesa_euro' calcola quanto resterebbe dopo quella spesa. Usalo per ogni domanda tipo 'posso permettermi…'.",
       inputSchema: z.object({ fino_al_mese: MONTH, spesa_euro: z.number().positive().optional() }),
       run: async ({ fino_al_mese, spesa_euro }) => json(projection(input, fino_al_mese < current ? current : fino_al_mese, spesa_euro)),
     }),
-    betaZodTool({
+    tool({
       name: "ricorrenti_e_obiettivi",
       description: "Spese ricorrenti (automatiche e riconosciute nello storico) e obiettivi di risparmio con quanto manca.",
       inputSchema: z.object({}),
@@ -132,7 +136,7 @@ function tools(input: FactsInput) {
           obiettivi: input.goals.map((g) => ({ nome: g.name, obiettivo: eur(g.target_cents), messi_da_parte: eur(g.saved_cents), entro: g.target_date ?? undefined })),
         }),
     }),
-    betaZodTool({
+    tool({
       name: "piccole_spese",
       description: "Piccole spese ripetute (fino a 10 €, almeno 3 volte nel mese) con stima annuale.",
       inputSchema: z.object({ mese: MONTH.optional() }),
@@ -160,55 +164,28 @@ export async function runChat(question: string): Promise<ChatResult> {
     const missing = isMissingObject(history.error);
     return { ok: false, error: missing ? "Esegui prima su Supabase la migrazione 20261101000006_ai.sql." : history.error.message };
   }
-  const messages: Anthropic.Beta.BetaMessageParam[] = [
-    ...(history.data ?? []).reverse().map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+  const turns: ChatTurn[] = [
+    ...(history.data ?? []).reverse().map((m) => ({ role: m.role as ChatTurn["role"], content: m.content as string })),
     { role: "user", content: question },
   ];
   // La conversazione deve iniziare con l'utente: tolgo eventuali risposte rimaste in testa.
-  while (messages.length && messages[0].role !== "user") messages.shift();
+  while (turns.length && turns[0].role !== "user") turns.shift();
 
-  const usage = emptyUsage();
-  const toolsUsed = new Set<string>();
-  let final: Anthropic.Beta.BetaMessage | null = null;
-  try {
-    const runner = anthropic().beta.messages.toolRunner({
-      model: MODEL,
-      max_tokens: 6000,
-      max_iterations: 6,
-      ...FALLBACK,
-      output_config: { effort: "medium" },
-      // Cache automatica: istruzioni e strumenti si riusano tra domande ravvicinate.
-      cache_control: { type: "ephemeral" },
-      system: CHAT_SYSTEM.replace("{OGGI}", today),
-      tools: tools({ ...all, today }),
-      messages,
-    });
-    for await (const message of runner) {
-      addUsage(usage, message.usage);
-      for (const b of message.content) if (b.type === "tool_use") toolsUsed.add(b.name);
-      final = message;
-    }
-  } catch (e) {
-    return { ok: false, error: `Chiamata all'AI non riuscita: ${e instanceof Error ? e.message : String(e)}` };
-  }
-  if (!final) return { ok: false, error: "Nessuna risposta dall'AI." };
-  if (final.stop_reason === "refusal") return { ok: false, error: "L'AI non ha risposto a questa domanda. Prova a riformularla." };
-  const answer = final.content
-    .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("\n")
-    .trim();
-  if (!answer) return { ok: false, error: `Risposta vuota (${final.stop_reason}). Riprova.` };
+  const res = await toolChat(CHAT_SYSTEM.replace("{OGGI}", today), turns, tools({ ...all, today }));
+  if (!res.ok) return res;
+  const { usage, model } = res;
+  const answer = res.value.text;
+  const toolsUsed = res.value.toolsUsed;
 
-  const cost = costUsd(usage, final.model);
+  const cost = costUsd(usage, model);
   const { error } = await supabase.from("chat_messages").insert([
     // Righe con le stesse colonne: in un insert multiplo PostgREST mette NULL nelle colonne mancanti.
     { role: "user", content: question, tools_used: [], model: null, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cost_usd: 0 },
     {
       role: "assistant",
       content: answer,
-      tools_used: [...toolsUsed],
-      model: final.model,
+      tools_used: toolsUsed,
+      model,
       input_tokens: usage.input + usage.cacheWrite,
       output_tokens: usage.output,
       cache_read_tokens: usage.cacheRead,
@@ -216,5 +193,5 @@ export async function runChat(question: string): Promise<ChatResult> {
     },
   ]);
   if (error) return { ok: false, error: error.message };
-  return { ok: true, answer, toolsUsed: [...toolsUsed], costUsd: cost };
+  return { ok: true, answer, toolsUsed, costUsd: cost };
 }

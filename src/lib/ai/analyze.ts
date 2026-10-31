@@ -1,10 +1,10 @@
 import "server-only";
-import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { loadAll } from "@/lib/analytics/loadAll";
 import { romeDate } from "@/lib/entry/amount";
 import { createClient } from "@/lib/supabase/server";
-import { addUsage, anthropic, costUsd, emptyUsage, FALLBACK, MODEL } from "./client";
+import { costUsd } from "./client";
+import { generateStructured } from "./llm";
 import { factNumbers, factsFor, unknownNumbers, type AnalysisKind } from "./facts";
 import { ANALYSIS_SYSTEM } from "./prompts";
 import { isMissingObject } from "@/lib/supabase/missing";
@@ -41,22 +41,9 @@ export async function runAnalysis(kind: AnalysisKind, client?: Client, today = r
   const { facts, levers, period } = factsFor(kind, { ...all, today });
   if (all.txns.length === 0) return { ok: false, error: "Non ci sono ancora movimenti da analizzare." };
 
-  let response;
-  try {
-    response = await anthropic().beta.messages.parse({
-      model: MODEL,
-      max_tokens: 8000,
-      ...FALLBACK,
-      output_config: { effort: "medium", format: betaZodOutputFormat(AnalysisSchema) },
-      system: ANALYSIS_SYSTEM,
-      messages: [{ role: "user", content: `FATTI:\n${JSON.stringify(facts)}` }],
-    });
-  } catch (e) {
-    return { ok: false, error: `Chiamata all'AI non riuscita: ${e instanceof Error ? e.message : String(e)}` };
-  }
-  if (response.stop_reason === "refusal") return { ok: false, error: "L'AI ha rifiutato la richiesta. Riprova più tardi." };
-  const out = response.parsed_output;
-  if (!out) return { ok: false, error: `Risposta dell'AI non valida (${response.stop_reason}).` };
+  const res = await generateStructured(ANALYSIS_SYSTEM, `FATTI:\n${JSON.stringify(facts)}`, AnalysisSchema);
+  if (!res.ok) return res;
+  const out = res.value;
 
   // Impatto dei consigli: lo mette il codice dalla leva scelta, poi ordino per impatto.
   const byId = new Map(levers.map((l) => [l.id, l]));
@@ -76,8 +63,8 @@ export async function runAnalysis(kind: AnalysisKind, client?: Client, today = r
     dati_insufficienti: out.dati_insufficienti,
     verifica: { numeri_non_trovati: [...new Set(unknownNumbers(text, known))] },
   };
-  const usage = addUsage(emptyUsage(), response.usage);
-  const cost = costUsd(usage, response.model);
+  const { usage, model } = res;
+  const cost = costUsd(usage, model);
   const headline = out.titolo.length > 140 ? `${out.titolo.slice(0, 137)}…` : out.titolo;
 
   const { data, error } = await supabase
@@ -90,7 +77,7 @@ export async function runAnalysis(kind: AnalysisKind, client?: Client, today = r
         headline,
         content,
         facts,
-        model: response.model,
+        model,
         input_tokens: usage.input + usage.cacheWrite,
         output_tokens: usage.output,
         cache_read_tokens: usage.cacheRead,

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AnalysisCard, KIND_LABEL, periodLabel, type AnalysisRow } from "@/components/AnalysisCard";
 import { PageHeader } from "@/components/PageHeader";
-import { aiConfigured, MODEL } from "@/lib/ai/client";
+import { aiInfo } from "@/lib/ai/client";
 import { romeDate } from "@/lib/entry/amount";
 import { createClient } from "@/lib/supabase/server";
 import { GenerateButtons } from "./GenerateButtons";
@@ -19,6 +19,7 @@ const DEFAULT_COST = { daily: 0.05, weekly: 0.07, monthly: 0.09 } as const;
 const usd = (v: number) => `$${v.toFixed(2).replace(".", ",")}`;
 
 export default async function AnalysisPage() {
+  const ai = aiInfo();
   const supabase = await createClient();
   const today = romeDate();
   const monthStart = `${today.slice(0, 7)}-01T00:00:00+01:00`;
@@ -54,7 +55,7 @@ export default async function AnalysisPage() {
   const chatRows = chat.data ?? [];
   const spentChat = chatRows.reduce((s, r) => s + Number(r.cost_usd), 0);
   const avg = (k: (typeof KINDS)[number]) => {
-    const xs = rows.filter((r) => r.kind === k && Number(r.cost_usd) > 0);
+    const xs = rows.filter((r) => r.kind === k && Number(r.cost_usd) > 0 && !r.model.startsWith("gemini"));
     return xs.length ? xs.reduce((s, r) => s + Number(r.cost_usd), 0) / xs.length : DEFAULT_COST[k];
   };
   const estimateAnalyses = KINDS.reduce((s, k) => s + avg(k) * RUNS_PER_MONTH[k], 0);
@@ -65,16 +66,16 @@ export default async function AnalysisPage() {
     <main className="page">
       <PageHeader title="Analisi AI" back="/altro" />
 
-      {!aiConfigured() && (
+      {!ai.configured && (
         <section className="card card-padded">
           <p>
-            <strong>AI non configurata.</strong> Su Vercel aggiungi la variabile <code>ANTHROPIC_API_KEY</code> (Settings → Environment
+            <strong>AI non configurata.</strong> Su Vercel aggiungi la variabile <code>{ai.keyName}</code> (Settings → Environment
             Variables, tipo <em>Sensitive</em>) e rifai il deploy.
           </p>
         </section>
       )}
 
-      <GenerateButtons disabled={!aiConfigured()} />
+      <GenerateButtons disabled={!ai.configured} />
 
       {latest.length === 0 ? (
         <section className="card card-padded">
@@ -88,24 +89,42 @@ export default async function AnalysisPage() {
       )}
 
       <h2 className="group-title">Costo AI</h2>
-      <section className="card card-padded cost-card">
-        <div className="cost-row">
-          <span>Spesi questo mese</span>
-          <strong>{usd(spentAnalyses + spentChat)}</strong>
-        </div>
-        <p className="muted small">
-          Analisi {usd(spentAnalyses)} · chat {usd(spentChat)} ({chatRows.length} {chatRows.length === 1 ? "risposta" : "risposte"})
-        </p>
-        <div className="cost-row">
-          <span>Stima mensile a regime</span>
-          <strong>≈ {usd(estimateAnalyses + chatEstimate)}</strong>
-        </div>
-        <p className="muted small">
-          30 serali, 4 settimanali e 1 mensile{rows.length ? " al costo medio reale" : " (stima iniziale)"} = {usd(estimateAnalyses)}, più la
-          chat al ritmo attuale. Modello {MODEL}. I numeri li calcola l&apos;app: all&apos;AI arrivano solo i totali, così i token restano
-          pochi.
-        </p>
-      </section>
+      {ai.free ? (
+        <section className="card card-padded cost-card">
+          <div className="cost-row">
+            <span>Costo</span>
+            <strong>Gratis</strong>
+          </div>
+          <p className="muted small">
+            Google Gemini, piano gratuito (modello {ai.model}). Ha un limite di richieste al minuto e al giorno: se lo raggiungi l&apos;app
+            prova il modello Lite, altrimenti ti chiede di riprovare più tardi. Sul piano gratuito Google può usare i dati inviati per
+            migliorare i suoi servizi: all&apos;AI arrivano solo totali e medie, e in chat i movimenti che servono a rispondere.
+          </p>
+          <p className="muted small">
+            Questo mese: {thisMonth.length} analisi e {chatRows.length}{" "}
+            {chatRows.length === 1 ? "risposta" : "risposte"} in chat.
+          </p>
+        </section>
+      ) : (
+        <section className="card card-padded cost-card">
+          <div className="cost-row">
+            <span>Spesi questo mese</span>
+            <strong>{usd(spentAnalyses + spentChat)}</strong>
+          </div>
+          <p className="muted small">
+            Analisi {usd(spentAnalyses)} · chat {usd(spentChat)} ({chatRows.length} {chatRows.length === 1 ? "risposta" : "risposte"})
+          </p>
+          <div className="cost-row">
+            <span>Stima mensile a regime</span>
+            <strong>≈ {usd(estimateAnalyses + chatEstimate)}</strong>
+          </div>
+          <p className="muted small">
+            30 serali, 4 settimanali e 1 mensile{rows.length ? " al costo medio reale" : " (stima iniziale)"} = {usd(estimateAnalyses)}, più
+            la chat al ritmo attuale. Modello {ai.model}. I numeri li calcola l&apos;app: all&apos;AI arrivano solo i totali, così i token
+            restano pochi.
+          </p>
+        </section>
+      )}
 
       {history.length > 0 && (
         <>

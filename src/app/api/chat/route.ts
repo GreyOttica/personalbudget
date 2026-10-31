@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireOwner } from "@/lib/auth";
 import { runChat } from "@/lib/ai/chat";
-import { aiConfigured } from "@/lib/ai/client";
+import { aiInfo } from "@/lib/ai/client";
 import { createClient } from "@/lib/supabase/server";
 
 export const maxDuration = 120;
@@ -18,7 +18,8 @@ async function guard() {
 export async function POST(request: NextRequest) {
   const denied = await guard();
   if (denied) return denied;
-  if (!aiConfigured()) return NextResponse.json({ error: "Manca ANTHROPIC_API_KEY su Vercel." }, { status: 503 });
+  const ai = aiInfo();
+  if (!ai.configured) return NextResponse.json({ error: `Manca ${ai.keyName} su Vercel.` }, { status: 503 });
   const body = (await request.json().catch(() => null)) as { message?: unknown } | null;
   const message = typeof body?.message === "string" ? body.message.trim() : "";
   if (!message || message.length > 1000) return NextResponse.json({ error: "Scrivi una domanda (massimo 1000 caratteri)." }, { status: 400 });

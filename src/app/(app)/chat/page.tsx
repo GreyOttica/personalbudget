@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/PageHeader";
-import { aiConfigured } from "@/lib/ai/client";
+import { aiInfo } from "@/lib/ai/client";
 import { createClient } from "@/lib/supabase/server";
 import { Chat, type ChatMessage } from "./Chat";
 import { isMissingObject } from "@/lib/supabase/missing";
@@ -8,6 +8,7 @@ import { isMissingObject } from "@/lib/supabase/missing";
 export const metadata: Metadata = { title: "Assistente" };
 
 export default async function ChatPage() {
+  const ai = aiInfo();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("chat_messages")
@@ -18,10 +19,10 @@ export default async function ChatPage() {
   return (
     <main className="page chat-page">
       <PageHeader title="Assistente" back="/altro" />
-      {!aiConfigured() && (
+      {!ai.configured && (
         <section className="card card-padded">
           <p>
-            <strong>AI non configurata.</strong> Aggiungi <code>ANTHROPIC_API_KEY</code> su Vercel e rifai il deploy.
+            <strong>AI non configurata.</strong> Aggiungi <code>{ai.keyName}</code> su Vercel e rifai il deploy.
           </p>
         </section>
       )}
@@ -30,7 +31,7 @@ export default async function ChatPage() {
           <p>{missing ? "Esegui su Supabase la migrazione 20261101000006_ai.sql (SQL Editor)." : error.message}</p>
         </section>
       ) : (
-        <Chat initial={(data ?? []) as ChatMessage[]} disabled={!aiConfigured()} />
+        <Chat initial={(data ?? []) as ChatMessage[]} disabled={!ai.configured} />
       )}
     </main>
   );
