@@ -83,7 +83,7 @@ Il piano email gratuito di Supabase invia pochi messaggi all'ora: se chiedi il c
 1. Apri l'indirizzo dell'app in **Safari** (non in Chrome o in un'altra app).
 2. Accedi con email e codice.
 3. Tocca **Condividi** (il quadrato con la freccia) → **Aggiungi alla schermata Home** → **Aggiungi**.
-4. Apri l'app dall'icona "Budget": si apre direttamente su **Nuovo movimento**, a schermo intero.
+4. Apri l'app dall'icona "Budget": si apre sulla **Home**, a schermo intero (il **+** in basso apre il nuovo movimento).
 
 L'app installata ha una memoria separata da Safari, quindi al primo avvio chiede di nuovo l'accesso: serve il
 **codice** dell'email (il link si aprirebbe in Safari). Per questo Supabase deve inviare email con

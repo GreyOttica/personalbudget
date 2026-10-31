@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "Budget",
     description: "Spese, budget e analisi personali",
     lang: "it",
-    start_url: "/nuovo",
+    start_url: "/",
     scope: "/",
     display: "standalone",
     orientation: "portrait",
