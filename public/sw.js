@@ -4,7 +4,7 @@
 //   /movimenti si aprono anche offline). Le pagine di login non vengono salvate.
 // - API e richieste interne di Next: sempre in rete, mai in cache. I dati offline
 //   li gestisce l'app con IndexedDB.
-const VERSION = "v2";
+const VERSION = "v3";
 const PAGES = `pages-${VERSION}`;
 const ASSETS = `assets-${VERSION}`;
 const OFFLINE_PAGES = ["/nuovo", "/movimenti", "/"];
