@@ -4,7 +4,7 @@
 //   /movimenti si aprono anche offline). Le pagine di login non vengono salvate.
 // - API e richieste interne di Next: sempre in rete, mai in cache. I dati offline
 //   li gestisce l'app con IndexedDB.
-const VERSION = "v1";
+const VERSION = "v2";
 const PAGES = `pages-${VERSION}`;
 const ASSETS = `assets-${VERSION}`;
 const OFFLINE_PAGES = ["/nuovo", "/movimenti", "/"];
@@ -96,4 +96,42 @@ self.addEventListener("fetch", (event) => {
       })(),
     );
   }
+});
+
+// Notifiche push (avvisi budget, promemoria, report).
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { title: "Budget", body: event.data ? event.data.text() : "" };
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title || "Budget", {
+      body: data.body || "",
+      tag: data.tag,
+      icon: "/icon.png",
+      badge: "/icon.png",
+      data: { url: data.url || "/" },
+    }),
+  );
+});
+
+// Tocco sulla notifica: apre (o porta in primo piano) l'app sulla pagina giusta.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = new URL(event.notification.data?.url || "/", self.location.origin).href;
+  event.waitUntil(
+    (async () => {
+      const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const c of all) {
+        if ("focus" in c) {
+          await c.focus();
+          if ("navigate" in c) await c.navigate(url).catch(() => {});
+          return;
+        }
+      }
+      await self.clients.openWindow(url);
+    })(),
+  );
 });

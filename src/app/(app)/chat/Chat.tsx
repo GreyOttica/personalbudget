@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { Proposal } from "@/lib/ai/chat";
+import { ProposalCard } from "./ProposalCard";
 
-export type ChatMessage = { id: string; role: "user" | "assistant"; content: string; tools_used?: string[]; cost_usd?: number; error?: boolean };
+export type ChatMessage = { id: string; role: "user" | "assistant"; content: string; tools_used?: string[]; cost_usd?: number; error?: boolean; proposal?: Proposal | null };
 
 let seq = 0;
 const nextId = (prefix: string) => `${prefix}${++seq}`;
@@ -11,7 +13,8 @@ const SUGGESTIONS = [
   "Posso permettermi un viaggio da 800 € a dicembre?",
   "Come sto andando questo mese rispetto al solito?",
   "Dove posso risparmiare di più?",
-  "Quanto ho speso in ristoranti negli ultimi 3 mesi?",
+  "Riorganizzami il budget per risparmiare 150 € al mese",
+  "A questo ritmo sforerò qualche budget questo mese?",
 ];
 
 const TOOL_LABEL: Record<string, string> = {
@@ -22,6 +25,8 @@ const TOOL_LABEL: Record<string, string> = {
   proiezione: "proiezione del saldo",
   ricorrenti_e_obiettivi: "ricorrenti e obiettivi",
   piccole_spese: "piccole spese",
+  budget_attuali: "budget attuali",
+  proponi_budget: "proposta di budget",
 };
 
 /** Testo semplice con **grassetto** ed elenchi "- ": niente HTML dall'AI. */
@@ -62,7 +67,8 @@ export function Chat({ initial, disabled }: { initial: ChatMessage[]; disabled: 
   const end = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    end.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    // In fondo alla pagina, così la casella di testo non copre l'ultima risposta (né il tasto "Applica").
+    if (end.current) window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
   }, [messages, busy]);
 
   async function send(q: string) {
@@ -74,9 +80,9 @@ export function Chat({ initial, disabled }: { initial: ChatMessage[]; disabled: 
     let reply: ChatMessage;
     try {
       const res = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: question }) });
-      const body = (await res.json().catch(() => ({}))) as { answer?: string; error?: string; toolsUsed?: string[]; costUsd?: number };
+      const body = (await res.json().catch(() => ({}))) as { answer?: string; error?: string; toolsUsed?: string[]; costUsd?: number; proposal?: Proposal | null };
       reply = res.ok && body.answer
-        ? { id: nextId("a"), role: "assistant", content: body.answer, tools_used: body.toolsUsed, cost_usd: body.costUsd }
+        ? { id: nextId("a"), role: "assistant", content: body.answer, tools_used: body.toolsUsed, cost_usd: body.costUsd, proposal: body.proposal }
         : { id: nextId("e"), role: "assistant", content: body.error ?? `Errore ${res.status}`, error: true };
     } catch {
       reply = { id: nextId("e"), role: "assistant", content: "Serve la connessione a internet per chiedere all'assistente.", error: true };
@@ -112,6 +118,7 @@ export function Chat({ initial, disabled }: { initial: ChatMessage[]; disabled: 
           {messages.map((m) => (
             <div key={m.id} className={`bubble bubble-${m.role}${m.error ? " bubble-error" : ""}`}>
               {m.role === "assistant" && !m.error ? <Rich text={m.content} /> : <p>{m.content}</p>}
+              {m.proposal && <ProposalCard p={m.proposal} />}
               {m.role === "assistant" && !m.error && (m.tools_used?.length ?? 0) > 0 && (
                 <span className="bubble-meta">
                   Dati: {m.tools_used!.map((t) => TOOL_LABEL[t] ?? t).join(", ")}

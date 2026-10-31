@@ -10,6 +10,7 @@ import { categoryColorSlots, composition, smallSpends } from "@/lib/analytics/in
 import { DailyFocus, TrendCharts } from "./DashboardCharts";
 import { KIND_LABEL, periodLabel, type AnalysisRow } from "@/components/AnalysisCard";
 import { createClient } from "@/lib/supabase/server";
+import { budgetSignals, type BudgetSignal } from "@/lib/analytics/alerts";
 import { Composition, MonthFlow, SmallSpends, VersusUsual } from "./HomeInsights";
 
 export const metadata: Metadata = { title: "Home" };
@@ -24,6 +25,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
   const current = monthOf(romeDate());
   const monthName = formatMonthName(month);
   const empty = d.trend.length === 0;
+  const signals = budgetSignals(d);
   const latestAi = month === current ? await latestAnalysis() : null;
 
   return (
@@ -63,7 +65,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
         <>
           <Hero d={d} monthName={monthName} />
           <Tiles d={d} />
-          {d.alerts.length > 0 && <Alerts d={d} />}
+          {signals.length > 0 && <Alerts signals={signals} />}
           {latestAi && <AiCard a={latestAi} />}
           <section className="section">
             <div className="section-head">
@@ -207,31 +209,26 @@ function Tiles({ d }: { d: Dashboard }) {
 
 const MAX_ALERTS = 3;
 
-function Alerts({ d }: { d: Dashboard }) {
-  // Prima i budget superati (per quanto sforano), poi quelli oltre l'80%.
-  const sorted = [...d.alerts].sort(
-    (a, b) =>
-      (a.status === "over" ? 0 : 1) - (b.status === "over" ? 0 : 1) ||
-      b.spent - (b.budget ?? 0) - (a.spent - (a.budget ?? 0)) ||
-      (b.ratio ?? 0) - (a.ratio ?? 0),
-  );
-  const shown = sorted.slice(0, MAX_ALERTS);
-  const hidden = sorted.length - shown.length;
+function Alerts({ signals }: { signals: BudgetSignal[] }) {
+  // budgetSignals: prima i superati, poi oltre l'80%, poi le proiezioni; ciascun gruppo per sforamento.
+  const shown = signals.slice(0, MAX_ALERTS);
+  const hidden = signals.length - shown.length;
   return (
     <section className="card alerts" aria-label="Avvisi budget">
       {shown.map((a) => (
-        <div key={a.id} className="alert-row">
+        <div key={a.key} className={`alert-row${a.level === "projection" ? " alert-projection" : ""}`}>
           <span className="cat-emoji" aria-hidden>
             {a.emoji}
           </span>
           <div className="alert-main">
             <strong>{a.name}</strong>
             <span className="muted small">
-              {formatEuros(a.spent)} su {formatEuros(a.budget ?? 0)}
-              {a.status === "over" ? ` · +${formatEuros(a.spent - (a.budget ?? 0))}` : ` · ${formatPercent(a.ratio ?? 0)}`}
+              {a.level === "projection"
+                ? `al ritmo attuale ${formatEuros(a.forecast ?? a.spent)} su ${formatEuros(a.budget)} · +${formatEuros((a.forecast ?? a.spent) - a.budget)}${a.perDayLeft !== null ? ` · ${formatEuros(a.perDayLeft)}/giorno per restare nel budget` : ""}`
+                : `${formatEuros(a.spent)} su ${formatEuros(a.budget)}${a.level === "over" ? ` · +${formatEuros(a.spent - a.budget)}` : ` · ${formatPercent(a.spent / a.budget)}`}`}
             </span>
           </div>
-          <StatusLabel status={a.status} text={a.status === "over" ? "Superato" : "Oltre l'80%"} />
+          <StatusLabel status={a.level === "over" ? "over" : "warning"} text={a.level === "over" ? "Superato" : a.level === "warning" ? "Oltre l'80%" : "Sforerai"} />
         </div>
       ))}
       {hidden > 0 && (

@@ -3088,3 +3088,83 @@ input[aria-invalid="true"] {
   align-self: center;
   margin: 6px 0 calc(var(--tabbar-h, 64px) + 16px);
 }
+
+/* Fase 5: notifiche */
+.good-text {
+  color: var(--good-text);
+}
+.notif-device {
+  display: grid;
+  gap: 10px;
+}
+.notif-device p {
+  margin: 0;
+}
+.notif-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.notif-log {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.notif-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+}
+.backup-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+.alert-projection .alert-main .small {
+  white-space: normal;
+}
+.proposal {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.proposal-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.proposal-table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 0.75rem;
+  padding: 0 0 4px;
+}
+.proposal-table td {
+  padding: 4px 0;
+  vertical-align: top;
+}
+.proposal-table td + td,
+.proposal-table th + th {
+  text-align: right;
+  padding-left: 8px;
+  white-space: nowrap;
+}
+.proposal-table td .small {
+  display: block;
+}
+.proposal-sum {
+  display: grid;
+  gap: 2px;
+}
+.proposal-warn {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--critical-text);
+}

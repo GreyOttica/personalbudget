@@ -15,7 +15,7 @@ export default function SettingsPage() {
       <h2 className="group-title">Notifiche</h2>
       <div className="card card-padded">
         <p className="muted">
-          Analisi serale, report, promemoria e avvisi sul budget si attiveranno qui una per una con la Fase 5.
+          Avvisi sul budget, promemoria, analisi e report: <Link href="/notifiche">Altro → Notifiche e backup</Link>.
         </p>
       </div>
     </main>

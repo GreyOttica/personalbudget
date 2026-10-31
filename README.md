@@ -30,6 +30,7 @@ scripts/import-sheet.ts import da riga di comando (alternativa alla pagina /impo
    - [`20261031000004_goals.sql`](supabase/migrations/20261031000004_goals.sql) (obiettivi di risparmio)
    - [`20261101000005_recurring_balance.sql`](supabase/migrations/20261101000005_recurring_balance.sql) (ricorrenti automatici e saldo reale)
    - [`20261101000006_ai.sql`](supabase/migrations/20261101000006_ai.sql) (Fase 4: analisi AI e chat)
+   - [`20261101000007_notifications.sql`](supabase/migrations/20261101000007_notifications.sql) (Fase 5: notifiche, controllo automatico, backup, proposte di budget)
 3. **Authentication → Emails → Templates → Magic Link**: sostituisci il corpo del messaggio con
    `<p>Il tuo codice di accesso: <strong>{{ .Token }}</strong></p>` e salva.
    L'app usa il codice e non il link, perché su iPhone il link si aprirebbe in Safari e non nella PWA.
@@ -119,7 +120,33 @@ L'AI di default è **Google Gemini, piano gratuito**. In alternativa si può usa
 - **Altro → Chiedi all'assistente**: domande libere; l'AI consulta i dati con strumenti (riepilogo mese, andamento,
   categoria, movimenti, proiezione del saldo, ricorrenti e obiettivi, piccole spese).
 - Il collegamento all'AI è in `src/lib/ai/gemini.ts` e `src/lib/ai/anthropic.ts`, dietro `src/lib/ai/llm.ts`.
-- Le analisi automatiche (21:30, lunedì e il primo del mese alle 8:00) arrivano con la Fase 5; per ora si generano con i pulsanti.
+- In chat puoi chiedere di **riorganizzare il budget** ("riorganizzami il budget per risparmiare 150 € al mese"): l'AI
+  sceglie gli importi, l'app calcola totale, spesa prevista, risparmio e avvisi (`src/lib/analytics/proposal.ts`), e
+  la proposta si applica dal mese in corso con il tasto **Applica**.
+
+## Notifiche, report e backup (Fase 5)
+
+- **Controllo automatico**: la migrazione 0007 crea su Supabase un job `pg_cron` che ogni 15 minuti chiama
+  `/api/cron/tick` con un segreto generato nel database (`app_config.cron_secret`, mai nel codice). L'indirizzo
+  dell'app lo salva l'app stessa quando apri **Altro → Notifiche e backup**: fallo una volta dopo la migrazione.
+  Le chiamate tengono anche attivo il progetto Supabase gratuito, che altrimenti va in pausa dopo 7 giorni.
+- Cosa fa, in base all'ora di Roma (ora legale compresa):
+
+  | Quando | Cosa |
+  |---|---|
+  | 8:00–22:00, ogni controllo | avvisi budget: proiezione "al ritmo attuale sforerai" (dal giorno 5), oltre 80%, superato. Una volta al mese per categoria e livello |
+  | 21:00 | promemoria, solo se oggi non hai registrato nulla |
+  | 21:30 | analisi della sera + notifica con il titolo |
+  | lunedì 8:00 | report della settimana |
+  | 1° del mese 8:00 | report del mese |
+  | domenica 3:00 | backup JSON nello Storage (cartella privata `backups`, si tengono gli ultimi 8) |
+
+  Se un controllo salta, quello dopo recupera; ogni job parte una volta sola (`notification_log`).
+- **Notifiche push** (Web Push, VAPID): le chiavi sono generate dall'app al primo uso e salvate in `app_config`,
+  non serve configurare nulla. Su iPhone servono iOS 16.4+ e l'app aperta dall'icona sulla schermata Home:
+  **Altro → Notifiche e backup → Attiva le notifiche → Consenti**, poi **Invia una notifica di prova**.
+- Stato del job su Supabase: **Integrations → Cron** (job `budget-tick`), oppure nella pagina Notifiche
+  ("Ultimo controllo").
 
 ## Regole di classificazione dello storico
 

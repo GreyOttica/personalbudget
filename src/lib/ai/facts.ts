@@ -2,6 +2,7 @@
 // L'AI interpreta e consiglia ma non fa conti: ogni cifra che può citare è in
 // questi oggetti, e l'impatto dei consigli viene dalle "leve" calcolate qui.
 // Funzioni pure, testate in scripts/test-analytics.ts.
+import { budgetSignals } from "../analytics/alerts.ts";
 import {
   addDays,
   addMonths,
@@ -50,7 +51,7 @@ const monthLabel = (m: string) => monthName.format(new Date(`${m}-01T00:00:00Z`)
 const analytic = (txns: InsightTxn[]) =>
   txns.filter((t): t is InsightTxn & { type: AnalyticsTxn["type"] } => t.type !== "opening_balance");
 
-function dashboardFor(input: FactsInput, month: string): Dashboard {
+export function dashboardFor(input: FactsInput, month: string): Dashboard {
   const since = `${addMonths(month, -12)}-01`;
   const until = `${addMonths(month, 1)}-01`;
   return buildDashboard({
@@ -101,6 +102,16 @@ export function monthFacts(input: FactsInput, month: string) {
     media_risparmio_pct: pct(d.averages.savingsRate),
     mesi_di_storia: d.averages.months,
     categorie,
+    // Categorie che al ritmo attuale sforeranno (o hanno già superato) il budget.
+    avvisi_budget: budgetSignals(d).map((x) => ({
+      categoria: x.name,
+      livello: x.level === "projection" ? "sforerà_al_ritmo_attuale" : x.level === "warning" ? "oltre_80" : "superato",
+      speso: eur(x.spent),
+      budget: eur(x.budget),
+      stima_fine_mese: x.forecast === null ? undefined : eur(x.forecast),
+      sforamento_previsto: x.forecast === null ? undefined : Math.max(0, eur(x.forecast - x.budget)),
+      al_giorno_per_restare_nel_budget: x.perDayLeft === null ? undefined : eur(x.perDayLeft),
+    })),
     _d: d, // per uso interno (anomalie, leve): rimosso prima di inviare
   };
 }

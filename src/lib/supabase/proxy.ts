@@ -2,7 +2,8 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { ownerEmail, supabasePublishableKey, supabaseUrl } from "@/lib/env";
 
-const PUBLIC_PATHS = ["/login", "/auth/signout", "/auth/callback"];
+// /api/cron/tick: chiamato da Supabase senza sessione, si autentica da solo con il segreto in app_config.
+const PUBLIC_PATHS = ["/login", "/auth/signout", "/auth/callback", "/api/cron/tick"];
 
 /**
  * Rinnova la sessione Supabase a ogni richiesta e lascia passare solo il

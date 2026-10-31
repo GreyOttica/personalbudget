@@ -451,3 +451,73 @@ test("proiezione: posso permettermi 800 € a dicembre?", () => {
   assert.equal(p.obiettivi_in_scadenza.length, 1, "il viaggio di dicembre rientra nel periodo");
   assert.equal(p.attenzione, undefined);
 });
+
+// --- Fase 5: segnali sul budget, proposte, orari di Roma --------------------------------
+import { budgetSignals, signalText } from "../src/lib/analytics/alerts.ts";
+import { buildProposal } from "../src/lib/analytics/proposal.ts";
+import { dueJobs, romeNow } from "../src/lib/notify/time.ts";
+
+const row = (o: Partial<import("../src/lib/analytics/dashboard.ts").CategoryRow>) => ({
+  id: "c", name: "Ristoranti", emoji: "🍝", isFixed: false, spent: 0, budget: null, ratio: null, status: "none" as const, average: 0, forecast: null, proposal: 0, ...o,
+});
+
+test("budgetSignals: proiezione, 80%, superato; niente per le fisse sotto il budget", () => {
+  const d = {
+    month: "2026-11", isCurrentMonth: true, day: 10, daysInMonth: 30,
+    categories: [
+      row({ id: "r", spent: 12000, budget: 25000, ratio: 0.48, status: "ok", forecast: 32000 }),
+      row({ id: "s", name: "Spesa", spent: 33000, budget: 40000, ratio: 0.825, status: "warning", forecast: 90000 }),
+      row({ id: "b", name: "Bar", spent: 6000, budget: 5000, ratio: 1.2, status: "over", forecast: 15000 }),
+      row({ id: "a", name: "Affitto", isFixed: true, spent: 90000, budget: 90000, ratio: 1, status: "ok", forecast: 90000 }),
+      row({ id: "x", name: "Casa", spent: 1000, budget: 10000, ratio: 0.1, status: "ok", forecast: 10400 }), // sfora di poco: niente
+    ],
+  };
+  const s = budgetSignals(d);
+  assert.deepEqual(s.map((x) => `${x.level}:${x.categoryId}`), ["over:b", "warning:s", "projection:r"]);
+  assert.equal(s[2].key, "projection:r:2026-11");
+  assert.equal(s[2].perDayLeft, Math.floor(13000 / 21));
+  const t = signalText(s[2]);
+  assert.match(t.title, /Ristoranti: così sforerai il budget/);
+  assert.match(t.body, /320\s€ su 250\s€ \(\+70\s€\)/);
+  assert.equal(budgetSignals({ ...d, day: 3 }).filter((x) => x.level === "projection").length, 0, "prima del giorno 5 niente proiezioni");
+  assert.equal(budgetSignals({ ...d, isCurrentMonth: false }).length, 0);
+});
+
+test("buildProposal: totali, risparmio e avvisi calcolati dal codice", () => {
+  const cats = [
+    { id: "aff", name: "Affitto", emoji: "🔑", kind: "expense" as const, is_fixed: true },
+    { id: "ris", name: "Ristoranti", emoji: "🍝", kind: "expense" as const, is_fixed: false },
+    { id: "sup", name: "Supermercato", emoji: "🛒", kind: "expense" as const, is_fixed: false },
+    { id: "sti", name: "Stipendio", emoji: "💼", kind: "income" as const, is_fixed: false },
+  ];
+  const d = {
+    averages: { income: 230000, expense: 160000, savingsRate: (230000 - 160000) / 230000, months: 6 },
+    categories: [
+      row({ id: "aff", isFixed: true, budget: 90000, average: 90000 }),
+      row({ id: "ris", budget: 25000, average: 24000 }),
+      row({ id: "sup", budget: null, average: 30000 }),
+    ],
+  };
+  const p = buildProposal(d, cats as never, [{ categoryId: "ris", cents: 10000 }, { categoryId: "sup", cents: 28000 }, { categoryId: "aff", cents: 80000 }]);
+  assert.equal(p.summary.budget_totale_attuale, 1150);
+  assert.equal(p.summary.budget_totale_proposto, 800 + 100 + 280);
+  assert.equal(p.summary.spesa_prevista_con_proposta, 1180);
+  assert.equal(p.summary.risparmio_mensile_previsto, 2300 - 1180);
+  assert.equal(p.items.length, 3);
+  assert.ok(p.summary.avvisi.some((a) => a.startsWith("Affitto è una spesa fissa")));
+  assert.ok(p.summary.avvisi.some((a) => a.startsWith("Ristoranti: 100 €")));
+});
+
+test("romeNow e dueJobs: ora legale e orari dei job", () => {
+  // 21:30 a Roma: in estate (UTC+2) è 19:30Z, in inverno (UTC+1) 20:30Z.
+  assert.deepEqual(romeNow(new Date("2026-07-15T19:30:00Z")), { date: "2026-07-15", hour: 21, minute: 30, weekday: 3, day: 15 });
+  assert.equal(romeNow(new Date("2026-12-15T20:30:00Z")).hour, 21);
+  assert.equal(romeNow(new Date("2026-10-25T00:30:00Z")).hour, 2); // giorno del cambio d'ora
+  const keys = (iso: string) => dueJobs(romeNow(new Date(iso))).map((j) => j.key);
+  assert.deepEqual(keys("2026-11-02T07:00:00Z"), ["weekly:2026-11-02"]); // lunedì 8:00
+  assert.deepEqual(keys("2026-11-02T06:45:00Z"), []); // lunedì 7:45
+  assert.deepEqual(keys("2026-12-01T07:15:00Z"), ["monthly:2026-12-01"]);
+  assert.deepEqual(keys("2026-11-03T20:00:00Z"), ["reminder:2026-11-03"]); // 21:00
+  assert.deepEqual(keys("2026-11-03T20:30:00Z"), ["daily:2026-11-03"]); // 21:30
+  assert.deepEqual(keys("2026-11-08T02:00:00Z"), ["backup:2026-11-08"]); // domenica 3:00
+});

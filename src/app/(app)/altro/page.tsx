@@ -20,7 +20,21 @@ export default async function MorePage() {
             </span>
             <span className="menu-main">
               <strong>Impostazioni</strong>
-              <span className="muted small">Tema, colori e, presto, notifiche</span>
+              <span className="muted small">Tema e colori</span>
+            </span>
+            <span className="chevron" aria-hidden>
+              ›
+            </span>
+          </Link>
+        </li>
+        <li>
+          <Link href="/notifiche" className="menu-row">
+            <span className="menu-icon" aria-hidden>
+              🔔
+            </span>
+            <span className="menu-main">
+              <strong>Notifiche e backup</strong>
+              <span className="muted small">Avvisi sul budget, promemoria, report del lunedì</span>
             </span>
             <span className="chevron" aria-hidden>
               ›
@@ -192,19 +206,6 @@ export default async function MorePage() {
               ›
             </span>
           </Link>
-        </li>
-      </ul>
-
-      <h2 className="group-title">In arrivo</h2>
-      <ul className="card menu">
-        <li className="menu-row disabled">
-          <span className="menu-icon" aria-hidden>
-            🔔
-          </span>
-          <span className="menu-main">
-            <strong>Notifiche</strong>
-            <span className="muted small">Fase 5</span>
-          </span>
         </li>
       </ul>
 

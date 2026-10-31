@@ -7,7 +7,8 @@ import { romeDate } from "@/lib/entry/amount";
 import { createClient } from "@/lib/supabase/server";
 import { costUsd } from "./client";
 import { toolChat, type ChatTurn, type ToolDef } from "./llm";
-import { monthFacts, projection, type FactsInput } from "./facts";
+import { dashboardFor, monthFacts, projection, type FactsInput } from "./facts";
+import { buildProposal, type ProposalItem, type ProposalSummary } from "@/lib/analytics/proposal";
 import { CHAT_SYSTEM } from "./prompts";
 import { isMissingObject } from "@/lib/supabase/missing";
 
@@ -20,7 +21,9 @@ function tool<S extends z.ZodObject>(def: { name: string; description: string; i
 
 const MONTH = z.string().regex(/^\d{4}-\d{2}$/).describe("Mese nel formato AAAA-MM");
 
-function tools(input: FactsInput): ToolDef[] {
+type Ctx = { supabase: Awaited<ReturnType<typeof createClient>>; question: string; proposalId: string | null };
+
+function tools(input: FactsInput, ctx: Ctx): ToolDef[] {
   const current = monthOf(input.today);
   const cat = new Map(input.categories.map((c) => [c.id, c]));
   const sub = new Map(input.subcategories.map((s) => [s.id, s]));
@@ -137,6 +140,74 @@ function tools(input: FactsInput): ToolDef[] {
         }),
     }),
     tool({
+      name: "budget_attuali",
+      description:
+        "Budget mensili attuali per categoria di spesa, con media degli ultimi mesi, mese scorso, speso e stima di fine mese in corso, più media entrate e risparmio. Da leggere prima di proporre nuovi budget.",
+      inputSchema: z.object({}),
+      run: async () => {
+        const d = dashboardFor(input, current);
+        const last = dashboardFor(input, addMonths(current, -1));
+        const lastBy = new Map(last.categories.map((c) => [c.id, c.spent]));
+        return json({
+          media_entrate_mensili: eur(d.averages.income),
+          media_spese_mensili: eur(d.averages.expense),
+          media_risparmio_pct: d.averages.savingsRate === null ? null : Math.round(d.averages.savingsRate * 1000) / 10,
+          mesi_di_storia: d.averages.months,
+          budget_totale: eur(d.budget.total),
+          categorie: input.categories
+            .filter((c) => c.kind === "expense")
+            .map((c) => {
+              const r = d.categories.find((x) => x.id === c.id);
+              return {
+                nome: c.name,
+                fissa: c.is_fixed || undefined,
+                budget: r?.budget == null ? null : eur(r.budget),
+                media_mensile: eur(r?.average ?? 0),
+                mese_scorso: eur(lastBy.get(c.id) ?? 0),
+                speso_mese_in_corso: eur(r?.spent ?? 0),
+                stima_fine_mese: r?.forecast == null ? undefined : eur(r.forecast),
+              };
+            })
+            .filter((c) => c.budget !== null || c.media_mensile > 0 || c.speso_mese_in_corso > 0),
+        });
+      },
+    }),
+    tool({
+      name: "proponi_budget",
+      description:
+        "Prepara una proposta di nuovi budget mensili (solo le categorie da cambiare; euro interi, 0 = togli il budget). Calcola totale, spesa prevista e risparmio mensile previsto, con avvisi. L'utente la applica con un pulsante: non è ancora attiva.",
+      inputSchema: z.object({
+        categorie: z.array(z.object({ nome: z.string(), euro: z.number().int().min(0).max(100000) })).min(1).max(30),
+        motivo: z.string().max(300).optional().describe("Obiettivo della proposta in poche parole"),
+      }),
+      run: async ({ categorie, motivo }) => {
+        const unknown: string[] = [];
+        const changes: { categoryId: string; cents: number }[] = [];
+        for (const x of categorie) {
+          const c = findCategory(x.nome);
+          if (!c || c.kind !== "expense") unknown.push(x.nome);
+          else changes.push({ categoryId: c.id, cents: x.euro * 100 });
+        }
+        if (!changes.length) return json({ errore: "Nessuna categoria riconosciuta", sconosciute: unknown });
+        const d = dashboardFor(input, current);
+        const p = buildProposal(d, input.categories, changes);
+        if (!p.items.length) return json({ errore: "La proposta non cambia nessun budget rispetto a quelli attuali." });
+        const { data, error } = await ctx.supabase
+          .from("budget_proposals")
+          .insert({ request: (motivo ?? ctx.question).slice(0, 300), items: p.items, summary: p.summary })
+          .select("id")
+          .single();
+        if (error) return json({ errore: isMissingObject(error) ? "Manca la migrazione 0007 su Supabase" : error.message });
+        ctx.proposalId = data.id;
+        return json({
+          proposta_salvata: true,
+          modifiche: p.items.map((i) => ({ categoria: i.name, da: i.from_cents === null ? null : eur(i.from_cents), a: eur(i.to_cents), media: eur(i.average_cents) })),
+          ...p.summary,
+          categorie_non_trovate: unknown.length ? unknown : undefined,
+        });
+      },
+    }),
+    tool({
       name: "piccole_spese",
       description: "Piccole spese ripetute (fino a 10 €, almeno 3 volte nel mese) con stima annuale.",
       inputSchema: z.object({ mese: MONTH.optional() }),
@@ -151,7 +222,9 @@ function tools(input: FactsInput): ToolDef[] {
   ];
 }
 
-export type ChatResult = { ok: true; answer: string; toolsUsed: string[]; costUsd: number } | { ok: false; error: string };
+export type Proposal = { id: string; items: ProposalItem[]; summary: ProposalSummary; applied_at: string | null };
+
+export type ChatResult = { ok: true; answer: string; toolsUsed: string[]; costUsd: number; proposal: Proposal | null } | { ok: false; error: string };
 
 export async function runChat(question: string): Promise<ChatResult> {
   const supabase = await createClient();
@@ -171,7 +244,8 @@ export async function runChat(question: string): Promise<ChatResult> {
   // La conversazione deve iniziare con l'utente: tolgo eventuali risposte rimaste in testa.
   while (turns.length && turns[0].role !== "user") turns.shift();
 
-  const res = await toolChat(CHAT_SYSTEM.replace("{OGGI}", today), turns, tools({ ...all, today }));
+  const ctx: Ctx = { supabase, question, proposalId: null };
+  const res = await toolChat(CHAT_SYSTEM.replace("{OGGI}", today), turns, tools({ ...all, today }, ctx));
   if (!res.ok) return res;
   const { usage, model } = res;
   const answer = res.value.text;
@@ -180,7 +254,7 @@ export async function runChat(question: string): Promise<ChatResult> {
   const cost = costUsd(usage, model);
   const { error } = await supabase.from("chat_messages").insert([
     // Righe con le stesse colonne: in un insert multiplo PostgREST mette NULL nelle colonne mancanti.
-    { role: "user", content: question, tools_used: [], model: null, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cost_usd: 0 },
+    { role: "user", content: question, tools_used: [], model: null, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cost_usd: 0, ...(ctx.proposalId ? { proposal_id: null } : {}) },
     {
       role: "assistant",
       content: answer,
@@ -190,8 +264,14 @@ export async function runChat(question: string): Promise<ChatResult> {
       output_tokens: usage.output,
       cache_read_tokens: usage.cacheRead,
       cost_usd: cost,
+      ...(ctx.proposalId ? { proposal_id: ctx.proposalId } : {}),
     },
   ]);
   if (error) return { ok: false, error: error.message };
-  return { ok: true, answer, toolsUsed, costUsd: cost };
+  let proposal: Proposal | null = null;
+  if (ctx.proposalId) {
+    const { data } = await supabase.from("budget_proposals").select("id, items, summary, applied_at").eq("id", ctx.proposalId).single();
+    proposal = (data as Proposal | null) ?? null;
+  }
+  return { ok: true, answer, toolsUsed, costUsd: cost, proposal };
 }
