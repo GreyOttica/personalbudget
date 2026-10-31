@@ -29,6 +29,38 @@ export default async function MorePage() {
         </li>
       </ul>
 
+      <h2 className="group-title">Assistente AI</h2>
+      <ul className="card menu">
+        <li>
+          <Link href="/analisi" className="menu-row">
+            <span className="menu-icon" aria-hidden>
+              🧠
+            </span>
+            <span className="menu-main">
+              <strong>Analisi</strong>
+              <span className="muted small">Serale, settimanale e mensile, con consigli e costo</span>
+            </span>
+            <span className="chevron" aria-hidden>
+              ›
+            </span>
+          </Link>
+        </li>
+        <li>
+          <Link href="/chat" className="menu-row">
+            <span className="menu-icon" aria-hidden>
+              💬
+            </span>
+            <span className="menu-main">
+              <strong>Chiedi all&apos;assistente</strong>
+              <span className="muted small">«Posso permettermi un viaggio da 800 € a dicembre?»</span>
+            </span>
+            <span className="chevron" aria-hidden>
+              ›
+            </span>
+          </Link>
+        </li>
+      </ul>
+
       <h2 className="group-title">Analisi</h2>
       <ul className="card menu">
         <li>
@@ -165,15 +197,6 @@ export default async function MorePage() {
 
       <h2 className="group-title">In arrivo</h2>
       <ul className="card menu">
-        <li className="menu-row disabled">
-          <span className="menu-icon" aria-hidden>
-            🤖
-          </span>
-          <span className="menu-main">
-            <strong>Analisi AI e chat</strong>
-            <span className="muted small">Fase 4</span>
-          </span>
-        </li>
         <li className="menu-row disabled">
           <span className="menu-icon" aria-hidden>
             🔔

@@ -8,6 +8,8 @@ import { romeDate } from "@/lib/entry/amount";
 import { formatEuros, formatMonth, formatMonthName, formatPercent } from "@/lib/format";
 import { categoryColorSlots, composition, smallSpends } from "@/lib/analytics/insights";
 import { DailyFocus, TrendCharts } from "./DashboardCharts";
+import { KIND_LABEL, periodLabel, type AnalysisRow } from "@/components/AnalysisCard";
+import { createClient } from "@/lib/supabase/server";
 import { Composition, MonthFlow, SmallSpends, VersusUsual } from "./HomeInsights";
 
 export const metadata: Metadata = { title: "Home" };
@@ -22,6 +24,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
   const current = monthOf(romeDate());
   const monthName = formatMonthName(month);
   const empty = d.trend.length === 0;
+  const latestAi = month === current ? await latestAnalysis() : null;
 
   return (
     <main className="page dash">
@@ -61,6 +64,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
           <Hero d={d} monthName={monthName} />
           <Tiles d={d} />
           {d.alerts.length > 0 && <Alerts d={d} />}
+          {latestAi && <AiCard a={latestAi} />}
           <section className="section">
             <div className="section-head">
               <h2>Giorno per giorno</h2>
@@ -236,5 +240,35 @@ function Alerts({ d }: { d: Dashboard }) {
         </Link>
       )}
     </section>
+  );
+}
+
+/** Ultima analisi AI (se la migrazione 0006 manca, la card semplicemente non compare). */
+async function latestAnalysis() {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("analyses")
+    .select("kind, period_start, period_end, headline, content")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data as Pick<AnalysisRow, "kind" | "period_start" | "period_end" | "headline" | "content"> | null) ?? null;
+}
+
+function AiCard({ a }: { a: Pick<AnalysisRow, "kind" | "period_start" | "period_end" | "headline" | "content"> }) {
+  const tip = a.content.consigli[0];
+  return (
+    <Link href="/analisi" className="card card-padded home-ai">
+      <span className="analysis-kind">
+        <span>🧠 {KIND_LABEL[a.kind]}</span>
+        <span className="muted small">{periodLabel(a)} ›</span>
+      </span>
+      <strong>{a.headline}</strong>
+      {tip && (
+        <span className="muted small">
+          {tip.titolo}: fino a {formatEuros(tip.euro_mese * 100)} al mese
+        </span>
+      )}
+    </Link>
   );
 }

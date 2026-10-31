@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireOwner } from "@/lib/auth";
 import { romeDate } from "@/lib/entry/amount";
 import { createClient } from "@/lib/supabase/server";
+import { isMissingObject } from "@/lib/supabase/missing";
 
 export type CheckpointResult = { ok: true } | { ok: false; error: string };
 
@@ -21,7 +22,7 @@ export async function saveCheckpoint(asOf: string, balanceCents: number): Promis
   await supabase.from("balance_checkpoints").delete().eq("as_of", asOf);
   const { error } = await supabase.from("balance_checkpoints").insert({ as_of: asOf, balance_cents: balanceCents, account_id: account?.id ?? null });
   if (error) {
-    const missing = /balance_checkpoints|does not exist|schema cache/i.test(error.message);
+    const missing = isMissingObject(error);
     return { ok: false, error: missing ? "Esegui prima su Supabase la migrazione 20261101000005_recurring_balance.sql." : error.message };
   }
   revalidatePath("/saldo");

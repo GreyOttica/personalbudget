@@ -29,6 +29,7 @@ scripts/import-sheet.ts import da riga di comando (alternativa alla pagina /impo
    - [`20261031000003_entry_sync.sql`](supabase/migrations/20261031000003_entry_sync.sql) (Fase 2)
    - [`20261031000004_goals.sql`](supabase/migrations/20261031000004_goals.sql) (obiettivi di risparmio)
    - [`20261101000005_recurring_balance.sql`](supabase/migrations/20261101000005_recurring_balance.sql) (ricorrenti automatici e saldo reale)
+   - [`20261101000006_ai.sql`](supabase/migrations/20261101000006_ai.sql) (Fase 4: analisi AI e chat)
 3. **Authentication → Emails → Templates → Magic Link**: sostituisci il corpo del messaggio con
    `<p>Il tuo codice di accesso: <strong>{{ .Token }}</strong></p>` e salva.
    L'app usa il codice e non il link, perché su iPhone il link si aprirebbe in Safari e non nella PWA.
@@ -56,6 +57,8 @@ scripts/import-sheet.ts import da riga di comando (alternativa alla pagina /impo
    | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | publishable key (`sb_publishable_…`) |
    | `SUPABASE_SECRET_KEY` | secret key (`sb_secret_…`) |
    | `OWNER_EMAIL` | la tua email |
+   | `ANTHROPIC_API_KEY` | chiave API Anthropic (`sk-ant-…`), segna la variabile come **Sensitive** |
+   | `ANTHROPIC_MODEL` | facoltativa, default `claude-opus-5-5` |
 
 4. **Deploy**. Dopo un paio di minuti ottieni un indirizzo tipo `https://personalbudget-xxxx.vercel.app`.
 5. Su Supabase, **Authentication → URL Configuration → Site URL**: incolla quell'indirizzo e salva.
@@ -95,6 +98,19 @@ L'app installata ha una memoria separata da Safari, quindi al primo avvio chiede
 - Se modifichi lo stesso movimento in due posti, vince la modifica più recente.
 - Serve aver aperto l'app almeno una volta con la rete, per scaricare categorie e movimenti.
 - "Esci" cancella dal telefono i dati salvati per l'offline (avvisa se ci sono movimenti non sincronizzati).
+
+## Analisi AI e chat (Fase 4)
+
+- La chiave Anthropic si crea su [console.anthropic.com](https://console.anthropic.com) → **API Keys**, e va solo su
+  Vercel: l'app la usa lato server, il telefono non la vede mai. Imposta un limite di spesa mensile in **Billing → Limits**.
+- **Altro → Analisi**: serale (oggi e mese in corso), settimanale (lunedì–domenica scorsi), mensile (mese scorso).
+  Tutti i numeri sono calcolati dall'app in `src/lib/ai/facts.ts`; l'AI riceve solo quei totali, li commenta e sceglie
+  al massimo 3 consigli tra "leve" già calcolate in euro. Ogni cifra del testo viene confrontata con i dati: se ne
+  compare una che non esiste, l'analisi lo segnala.
+- **Altro → Chiedi all'assistente**: domande libere; l'AI consulta i dati con strumenti (riepilogo mese, andamento,
+  categoria, movimenti, proiezione del saldo, ricorrenti e obiettivi, piccole spese).
+- Il costo di ogni chiamata è salvato e mostrato in **Analisi → Costo AI**, con la stima mensile.
+- Le analisi automatiche (21:30, lunedì e il primo del mese alle 8:00) arrivano con la Fase 5; per ora si generano con i pulsanti.
 
 ## Regole di classificazione dello storico
 

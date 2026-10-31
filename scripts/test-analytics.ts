@@ -368,3 +368,86 @@ test("ricorrenti automatici: date, prossimo addebito, stima di fine mese", () =>
   assert.equal(r.forecast, 95000);
   assert.equal(r.proposal, 95000, "la proposta di budget segue il ricorrente");
 });
+
+// --- fatti per l'AI e verifica delle cifre ---------------------------------------
+import { dailyFacts, factNumbers, monthlyFacts, numbersIn, unknownNumbers, weeklyFacts, type FactsInput } from "../src/lib/ai/facts.ts";
+
+function aiInput(): FactsInput {
+  const txns: InsightTxn[] = [x("2025-12-24", "opening_balance", 3000, "altro")];
+  for (const m of ["2026-07", "2026-08", "2026-09"]) {
+    txns.push(x(`${m}-10`, "income", 2200, "pay"), x(`${m}-15`, "expense", 900, "rent"), x(`${m}-25`, "investment", 200, "inv"));
+    for (let d = 1; d <= 20; d++) txns.push(x(`${m}-${String(d).padStart(2, "0")}`, "expense", 2, "bar", { subcategory_id: "s-bar", note: "Caffè" }));
+    txns.push(x(`${m}-12`, "expense", 30, "food"));
+  }
+  txns.push(x("2026-10-10", "income", 2200, "pay"), x("2026-10-15", "expense", 900, "rent"));
+  for (let d = 1; d <= 30; d++) txns.push(x(`2026-10-${String(d).padStart(2, "0")}`, "expense", 2, "bar", { subcategory_id: "s-bar", note: "Caffè" }));
+  txns.push(x("2026-10-20", "expense", 12, "food"), x("2026-10-31", "expense", 160, "food", { note: "Spesa grande" }));
+  return {
+    txns,
+    categories: cats2,
+    subcategories: subs2,
+    budgets: [{ category_id: "bar", valid_from: "2026-10-01", amount_cents: 4000 }],
+    rules: [],
+    checkpoints: [],
+    goals: [{ id: "g", name: "Viaggio", emoji: "✈️", target_cents: 80000, saved_cents: 20000, target_date: "2026-12-20" }],
+    today: "2026-10-31",
+  };
+}
+
+test("fatti serali: giornata, mese, anomalie, leve con impatto calcolato", () => {
+  const { facts, levers, period } = dailyFacts(aiInput());
+  assert.deepEqual(period, { start: "2026-10-31", end: "2026-10-31" });
+  assert.equal(facts.giorno.spese, 160, "il 31 solo la spesa grande (il caffè è fino al 30)");
+  assert.equal(facts.giorno.movimenti.length, 1);
+  assert.equal(facts.mese.spese, 900 + 60 + 160 + 12);
+  assert.equal("_d" in facts.mese, false, "i dati interni non vanno all'AI");
+  const bar = facts.mese.categorie.find((c) => c.nome === "Cibo fuori")!;
+  assert.equal(bar.stato, "superato", "60 € su 40 € di budget");
+  assert.ok(facts.anomalie.some((a) => a.tipo === "spesa_insolita" && a.euro === 160), "160 € al supermercato oggi contro una mediana di 30 €");
+  assert.equal(facts.piccole_spese.voci[0].nome, "Bar");
+  assert.equal(facts.piccole_spese.voci[0].volte, 30);
+  const rientro = levers.find((l) => l.tipo === "rientro_budget")!;
+  assert.equal(rientro.euro_mese, 20, "rientrare da 60 € a 40 €");
+  const caffe = levers.find((l) => l.tipo === "piccola_spesa")!;
+  assert.equal(caffe.euro_mese, 30, "dimezzare 60 € al mese di caffè");
+  assert.equal(caffe.euro_anno, 360);
+  assert.deepEqual(levers.map((l) => l.id), levers.map((_, i) => `L${i + 1}`));
+  assert.ok(levers.every((l, i) => i === 0 || levers[i - 1].euro_mese >= l.euro_mese), "leve ordinate per impatto");
+  assert.equal(facts.obiettivi[0].al_mese, 300);
+});
+
+test("fatti settimanali e mensili: periodi giusti", () => {
+  const input = { ...aiInput(), today: "2026-11-02" }; // lunedì
+  const w = weeklyFacts(input);
+  assert.deepEqual(w.period, { start: "2026-10-26", end: "2026-11-01" }, "da lunedì a domenica scorsa");
+  assert.equal(w.facts.settimana.per_giorno.length, 7);
+  assert.equal(w.facts.settimana.per_giorno[0].giorno, "lunedì");
+  const m = monthlyFacts({ ...aiInput(), today: "2026-11-01" });
+  assert.deepEqual(m.period, { start: "2026-10-01", end: "2026-10-31" });
+  assert.equal(m.facts.mese.in_corso, false);
+  assert.equal(m.facts.saldo_conto_stimato_oggi, 3000 + 4 * 2200 - 3 * (900 + 40 + 30 + 200) - (900 + 60 + 172), "saldo iniziale + entrate − spese − investimenti");
+});
+
+test("verifica delle cifre: segnala solo i numeri che non sono nei fatti", () => {
+  assert.deepEqual(numbersIn("Hai speso 1.234 € (12,5%) in 3 giorni"), [1234, 12.5, 3]);
+  const known = factNumbers({ a: 1234, b: { c: [12.5, 300] }, d: "media 45 € al mese" });
+  assert.deepEqual(unknownNumbers("Spese 1.234 €, 12,5%, media 45 €, il 15 ottobre 2026", known), []);
+  assert.deepEqual(unknownNumbers("Risparmieresti 270 € al mese", known), [270]);
+  assert.deepEqual(unknownNumbers("Circa 1.235 €", known), [], "tolleranza di arrotondamento");
+});
+
+import { projection } from "../src/lib/ai/facts.ts";
+
+test("proiezione: posso permettermi 800 € a dicembre?", () => {
+  const input = aiInput();
+  const p = projection(input, "2026-12", 800);
+  // Mesi completi luglio–settembre: netto = 2200 − (900 + 40 + 30) − 200 = 1030 al mese.
+  assert.equal(p.risparmio_netto_medio_mensile, 1030);
+  assert.equal(p.mesi_completi_da_qui, 2);
+  const today = balanceHistory(input.txns, input.today).current / 100;
+  assert.equal(p.saldo_conto_oggi, Math.round(today));
+  assert.equal(p.saldo_previsto_fine_periodo, Math.round(today + p.movimento_previsto_resto_mese + 2 * 1030));
+  assert.equal(p.saldo_dopo_la_spesa, p.saldo_previsto_fine_periodo - 800);
+  assert.equal(p.obiettivi_in_scadenza.length, 1, "il viaggio di dicembre rientra nel periodo");
+  assert.equal(p.attenzione, undefined);
+});

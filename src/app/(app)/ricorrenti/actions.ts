@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireOwner } from "@/lib/auth";
 import { romeDate } from "@/lib/entry/amount";
 import { createClient } from "@/lib/supabase/server";
+import { isMissingObject } from "@/lib/supabase/missing";
 
 export type RuleInput = {
   id?: string;
@@ -59,7 +60,7 @@ export async function saveRule(input: RuleInput): Promise<RuleResult> {
     ? await supabase.from("recurring_rules").update(row).eq("id", input.id)
     : await supabase.from("recurring_rules").insert(row);
   if (error) {
-    const missing = /recurring_rules|does not exist|schema cache/i.test(error.message);
+    const missing = isMissingObject(error);
     return { ok: false, error: missing ? "Esegui prima su Supabase la migrazione 20261101000005_recurring_balance.sql." : error.message };
   }
   const { data: created } = await supabase.rpc("generate_recurring", { p_today: romeDate() });
