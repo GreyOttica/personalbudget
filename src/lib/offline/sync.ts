@@ -43,13 +43,10 @@ export async function saveTxn(txn: TxnDraft) {
 }
 
 export async function deleteTxn(id: string) {
-  const queued = (await store.getOutbox()).find((o) => o.id === id);
-  if (queued?.op === "upsert" && !(await store.isKnownToServer(id))) {
-    // Creato sul telefono e mai arrivato al server: basta toglierlo dalla coda.
-    await store.removeOp(id);
-  } else {
-    await store.putOp({ op: "delete", id, updated_at: new Date().toISOString() });
-  }
+  // Sempre una cancellazione in coda, anche per un movimento appena creato: potrebbe essere già in viaggio
+  // verso il server (sincronizzazione in corso) o essere fuori dalla finestra salvata sul telefono.
+  // Sul server cancellare un movimento che non c'è non fa nulla.
+  await store.putOp({ op: "delete", id, updated_at: new Date().toISOString() });
   await refreshPending();
   void flush();
 }

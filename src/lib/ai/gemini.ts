@@ -56,16 +56,21 @@ function retryDelayMs(body: string): number {
   return Math.min(20_000, m ? Number(m[1]) * 1000 + 500 : 4000);
 }
 
-async function call(model: string, body: Record<string, unknown>): Promise<GeminiResponse & { model: string }> {
+/** Tempo massimo complessivo per una risposta (tentativi compresi): la funzione su Vercel ha 120 s. */
+const BUDGET_MS = 85_000;
+
+async function call(model: string, body: Record<string, unknown>, deadline: number): Promise<GeminiResponse & { model: string }> {
   const key = process.env.GEMINI_API_KEY?.trim();
   if (!key) throw new AiError("Manca GEMINI_API_KEY su Vercel.");
   let current = model;
   for (let attempt = 0; ; attempt++) {
+    const left = deadline - Date.now();
+    if (left < 5_000) throw new AiError("Gemini non ha risposto in tempo. Riprova tra qualche minuto.");
     const res = await fetch(`${BASE}/v1beta/models/${encodeURIComponent(current)}:generateContent`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(50_000), // più tentativi devono stare nei 120 s della funzione
+      signal: AbortSignal.timeout(Math.min(50_000, left)),
       cache: "no-store",
     });
     if (res.ok) return { ...((await res.json()) as GeminiResponse), model: current };
@@ -74,7 +79,7 @@ async function call(model: string, body: Record<string, unknown>): Promise<Gemin
     if (busy && attempt < 3) {
       // Un nuovo tentativo sullo stesso modello, poi passo al Lite (quota e server separati).
       if (attempt >= 1 && current !== LITE) current = LITE;
-      else await new Promise((r) => setTimeout(r, res.status === 429 ? retryDelayMs(text) : 2500 * (attempt + 1)));
+      else await new Promise((r) => setTimeout(r, Math.min(res.status === 429 ? retryDelayMs(text) : 2500 * (attempt + 1), Math.max(0, deadline - Date.now() - 5_000))));
       continue;
     }
     if (res.status >= 500) throw new AiError("I server di Google Gemini sono sovraccarichi in questo momento. Riprova tra qualche minuto.");
@@ -119,7 +124,7 @@ export async function structured<S extends z.ZodObject>(model: string, system: s
     systemInstruction: { parts: [{ text: system }] },
     contents: [{ role: "user", parts: [{ text: user }] }],
     generationConfig: { responseMimeType: "application/json", responseSchema: schemaOf(schema), maxOutputTokens: 8192, temperature: 0.4 },
-  });
+  }, Date.now() + BUDGET_MS);
   const usage = emptyUsage();
   addUsage(usage, r);
   const raw = textOf(candidate(r)).replace(/^```(?:json)?\s*|\s*```$/g, "");
@@ -144,6 +149,7 @@ export async function chat(model: string, system: string, turns: ChatTurn[], too
     return { name: t.name, description: t.description, ...(Object.keys((params.properties as object) ?? {}).length ? { parameters: params } : {}) };
   });
   let current = model;
+  const deadline = Date.now() + BUDGET_MS;
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     const last = round === MAX_TOOL_ROUNDS;
     const r = await call(current, {
@@ -153,7 +159,7 @@ export async function chat(model: string, system: string, turns: ChatTurn[], too
       // All'ultimo giro niente strumenti: deve rispondere con quello che ha.
       toolConfig: { functionCallingConfig: { mode: last ? "NONE" : "AUTO" } },
       generationConfig: { maxOutputTokens: 4096, temperature: 0.4 },
-    });
+    }, deadline);
     current = r.model; // se è passato al Lite per la quota, resto sul Lite
     addUsage(usage, r);
     const msg = candidate(r);

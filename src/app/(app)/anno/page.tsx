@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
+import { monthOf } from "@/lib/analytics/dashboard";
 import { loadAll } from "@/lib/analytics/loadAll";
 import { yearSummary } from "@/lib/analytics/insights";
 import { romeDate } from "@/lib/entry/amount";
@@ -15,7 +16,7 @@ export default async function YearPage({ searchParams }: { searchParams: Promise
   const current = Number(romeDate().slice(0, 4));
   const years = [...new Set(txns.map((t) => Number(t.occurred_on.slice(0, 4))))].sort();
   const year = y && /^\d{4}$/.test(y) && years.includes(Number(y)) ? Number(y) : current;
-  const s = yearSummary(txns, categories, year);
+  const s = yearSummary(txns, categories, year, monthOf(romeDate()));
   const pct = (v: number | null) => (v === null ? "—" : formatPercent(v));
   const diff = (a: number, b: number) => (b ? (a - b) / b : null);
 
@@ -101,12 +102,13 @@ export default async function YearPage({ searchParams }: { searchParams: Promise
           <h2 className="group-title">Rispetto al {year - 1}</h2>
           <div className="card card-padded">
             <p className="muted small">
-              Il {year - 1} ha {s.previous.months} {s.previous.months === 1 ? "mese" : "mesi"} di dati: il confronto è sui totali, non sulla media mensile.
+              Il {year - 1} ha {s.previous.months} {s.previous.months === 1 ? "mese" : "mesi"} di dati: il confronto è sui totali, non sulla media mensile
+              {s.previous.months < 3 ? ", quindi la differenza in percentuale non avrebbe senso." : "."}
             </p>
             <ul className="plain-list">
               <li>
                 Spese: {formatEuros(s.totals.expense)} contro {formatEuros(s.previous.expense)}
-                {diff(s.totals.expense, s.previous.expense) !== null && ` (${formatPercent(diff(s.totals.expense, s.previous.expense)!)})`}
+                {s.previous.months >= 3 && diff(s.totals.expense, s.previous.expense) !== null && ` (${formatPercent(diff(s.totals.expense, s.previous.expense)!)})`}
               </li>
               <li>
                 Entrate: {formatEuros(s.totals.income)} contro {formatEuros(s.previous.income)}

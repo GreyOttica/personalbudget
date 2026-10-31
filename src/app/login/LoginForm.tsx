@@ -1,12 +1,16 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { requestCode, verifyCode, type LoginState } from "./actions";
 
 const initial: LoginState = { step: "email", email: "" };
 
 export function LoginForm({ notice }: { notice?: string }) {
   const [emailState, sendCode, sending] = useActionState(requestCode, initial);
+  // Qui si arriva anche quando la sessione è scaduta: tolgo le pagine salvate per l'offline.
+  useEffect(() => {
+    navigator.serviceWorker?.controller?.postMessage({ type: "clear" });
+  }, []);
   const [restart, setRestart] = useState(0);
 
   if (emailState.step === "code") {

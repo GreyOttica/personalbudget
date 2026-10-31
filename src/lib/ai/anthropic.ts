@@ -5,7 +5,7 @@ import type { z } from "zod";
 import { emptyUsage, type Usage } from "./client";
 import { AiError, runTool, type ChatTurn, type LlmResult, type ToolDef } from "./llm";
 
-const client = () => new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 2, timeout: 110_000 });
+const client = () => new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 80_000 /* dentro i 120 s della funzione su Vercel */ });
 
 /** Se un filtro di sicurezza declina la richiesta, l'API la ripete su un modello di riserva. */
 const FALLBACK = { betas: ["server-side-fallback-2026-07-01" as const], fallbacks: "default" as const };

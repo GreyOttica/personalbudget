@@ -244,6 +244,7 @@ export async function runChat(question: string): Promise<ChatResult> {
   // La conversazione deve iniziare con l'utente: tolgo eventuali risposte rimaste in testa.
   while (turns.length && turns[0].role !== "user") turns.shift();
 
+  const askedAt = new Date();
   const ctx: Ctx = { supabase, question, proposalId: null };
   const res = await toolChat(CHAT_SYSTEM.replace("{OGGI}", today), turns, tools({ ...all, today }, ctx));
   if (!res.ok) return res;
@@ -254,10 +255,11 @@ export async function runChat(question: string): Promise<ChatResult> {
   const cost = costUsd(usage, model);
   const { error } = await supabase.from("chat_messages").insert([
     // Righe con le stesse colonne: in un insert multiplo PostgREST mette NULL nelle colonne mancanti.
-    { role: "user", content: question, tools_used: [], model: null, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cost_usd: 0, ...(ctx.proposalId ? { proposal_id: null } : {}) },
+    { role: "user", content: question, created_at: askedAt.toISOString(), tools_used: [], model: null, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cost_usd: 0, ...(ctx.proposalId ? { proposal_id: null } : {}) },
     {
       role: "assistant",
       content: answer,
+      created_at: new Date(askedAt.getTime() + 1).toISOString(), // dopo la domanda, anche nello stesso millisecondo
       tools_used: toolsUsed,
       model,
       input_tokens: usage.input + usage.cacheWrite,

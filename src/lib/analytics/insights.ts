@@ -396,7 +396,8 @@ export type YearSummary = {
 
 const rate = (income: number, expense: number) => (income > 0 ? (income - expense) / income : null);
 
-export function yearSummary(txns: InsightTxn[], categories: AnalyticsCategory[], year: number): YearSummary {
+/** `current`: mese in corso (YYYY-MM), escluso da migliore/peggiore perché ancora incompleto. */
+export function yearSummary(txns: InsightTxn[], categories: AnalyticsCategory[], year: number, current?: string): YearSummary {
   const y = String(year);
   const py = String(year - 1);
   const months = Array.from({ length: 12 }, (_, i) => `${y}-${String(i + 1).padStart(2, "0")}`);
@@ -429,7 +430,7 @@ export function yearSummary(txns: InsightTxn[], categories: AnalyticsCategory[],
     expense: 0,
     investment: 0,
   });
-  const rated = withData.filter((r) => r.savingsRate !== null) as (typeof rows[number] & { savingsRate: number })[];
+  const rated = withData.filter((r) => r.savingsRate !== null && (!current || r.month < current)) as (typeof rows[number] & { savingsRate: number })[];
   const best = rated.length ? rated.reduce((a, b) => (b.savingsRate > a.savingsRate ? b : a)) : null;
   const worst = rated.length ? rated.reduce((a, b) => (b.savingsRate < a.savingsRate ? b : a)) : null;
   const cat = new Map(categories.map((c) => [c.id, c]));
@@ -442,7 +443,7 @@ export function yearSummary(txns: InsightTxn[], categories: AnalyticsCategory[],
     months: rows,
     totals: { ...totals, savingsRate: rate(totals.income, totals.expense) },
     best: best && { month: best.month, savingsRate: best.savingsRate },
-    worst: worst && withData.length > 1 ? { month: worst.month, savingsRate: worst.savingsRate } : null,
+    worst: worst && rated.length > 1 ? { month: worst.month, savingsRate: worst.savingsRate } : null,
     topCategories,
     previous: prevMonths.size ? { ...prev, savingsRate: rate(prev.income, prev.expense), months: prevMonths.size } : null,
     tags: [...byTag].map(([tag, amount]) => ({ tag, amount })).sort((a, b) => b.amount - a.amount),

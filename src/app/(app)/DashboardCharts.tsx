@@ -240,7 +240,7 @@ export function DailyFocus({ daily, isCurrentMonth }: { daily: Daily; isCurrentM
 }
 
 function TodayCard({ today, source }: { today: NonNullable<Daily["today"]>; source: Daily["variableTargetSource"] }) {
-  const over = today.perDayLeft !== null && today.spent > today.perDayLeft;
+  const over = today.perDayLeft !== null && (today.perDayLeft <= 0 || today.spent > today.perDayLeft);
   return (
     <div className="today">
       <div className="today-main">
@@ -253,9 +253,19 @@ function TodayCard({ today, source }: { today: NonNullable<Daily["today"]>; sour
       </div>
       {today.perDayLeft !== null && (
         <div className={`today-left ${over ? "today-over" : ""}`}>
-          <span className="small">{source === "budget" ? "Puoi spendere" : "Per restare nella media"}</span>
-          <strong>{formatEuros(today.perDayLeft)}</strong>
-          <span className="small">al giorno fino a fine mese</span>
+          {today.perDayLeft <= 0 ? (
+            <>
+              <span className="small">{source === "budget" ? "Budget variabile" : "Media del mese"}</span>
+              <strong>{source === "budget" ? "esaurito" : "superata"}</strong>
+              <span className="small">ogni spesa in più è sforamento</span>
+            </>
+          ) : (
+            <>
+              <span className="small">{source === "budget" ? "Puoi spendere" : "Per restare nella media"}</span>
+              <strong>{formatEuros(today.perDayLeft)}</strong>
+              <span className="small">al giorno fino a fine mese</span>
+            </>
+          )}
         </div>
       )}
     </div>

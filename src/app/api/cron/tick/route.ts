@@ -29,7 +29,7 @@ async function handle(request: NextRequest) {
   if (!(await authorized(request))) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   try {
     // Solo per i test automatici: simula un'altra ora (TICK_ALLOW_AT=1, mai impostata su Vercel).
-    const at = process.env.TICK_ALLOW_AT === "1" ? request.nextUrl.searchParams.get("at") : null;
+    const at = process.env.TICK_ALLOW_AT === "1" && process.env.VERCEL_ENV !== "production" ? request.nextUrl.searchParams.get("at") : null;
     return NextResponse.json(await runTick(at ? new Date(at) : new Date()));
   } catch (e) {
     console.error("tick:", e);
@@ -37,5 +37,5 @@ async function handle(request: NextRequest) {
   }
 }
 
+// Solo POST: un link aperto per sbaglio (GET) non deve far partire analisi, backup o notifiche.
 export const POST = handle;
-export const GET = handle;

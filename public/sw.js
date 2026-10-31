@@ -4,7 +4,7 @@
 //   /movimenti si aprono anche offline). Le pagine di login non vengono salvate.
 // - API e richieste interne di Next: sempre in rete, mai in cache. I dati offline
 //   li gestisce l'app con IndexedDB.
-const VERSION = "v3";
+const VERSION = "v4";
 const PAGES = `pages-${VERSION}`;
 const ASSETS = `assets-${VERSION}`;
 const OFFLINE_PAGES = ["/nuovo", "/movimenti", "/"];
@@ -24,7 +24,8 @@ self.addEventListener("activate", (event) => {
 });
 
 const pageKey = (url) => new URL(url).origin + new URL(url).pathname;
-const cacheable = (path) => !NO_CACHE.some((p) => path === p || path.startsWith(p));
+// Si salvano solo le pagine che servono offline: le altre (saldo, analisi, chat, notifiche) restano solo in rete.
+const cacheable = (path) => OFFLINE_PAGES.includes(path) && !NO_CACHE.some((p) => path === p || path.startsWith(p));
 
 async function savePage(url, response) {
   if (response.ok && response.type === "basic" && !response.redirected && cacheable(new URL(url).pathname)) {

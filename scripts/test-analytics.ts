@@ -521,3 +521,19 @@ test("romeNow e dueJobs: ora legale e orari dei job", () => {
   assert.deepEqual(keys("2026-11-03T20:30:00Z"), ["daily:2026-11-03"]); // 21:30
   assert.deepEqual(keys("2026-11-08T02:00:00Z"), ["backup:2026-11-08"]); // domenica 3:00
 });
+
+test("buildProposal: 0 € toglie il budget e nella stima conta la media", () => {
+  const cats = [
+    { id: "ris", name: "Ristoranti", emoji: "🍝", kind: "expense" as const, is_fixed: false },
+    { id: "sup", name: "Supermercato", emoji: "🛒", kind: "expense" as const, is_fixed: false },
+  ];
+  const d = {
+    averages: { income: 200000, expense: 100000, savingsRate: 0.5, months: 6 },
+    categories: [row({ id: "ris", budget: 25000, average: 24000 }), row({ id: "sup", budget: null, average: 30000 })],
+  };
+  const p = buildProposal(d, cats as never, [{ categoryId: "ris", cents: 0 }, { categoryId: "sup", cents: 0 }]);
+  assert.equal(p.items.length, 1, "Supermercato era già senza budget: nessuna modifica");
+  assert.equal(p.items[0].to_cents, 0);
+  assert.equal(p.summary.spesa_prevista_con_proposta, 240 + 300);
+  assert.equal(p.summary.budget_totale_proposto, 0);
+});

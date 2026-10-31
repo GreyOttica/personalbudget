@@ -16,10 +16,15 @@ const TABLES = [
   "notification_settings",
 ] as const;
 
+/** Ordine stabile per leggere a pagine senza saltare o ripetere righe. */
+const ORDER: Record<string, string[]> = { budgets: ["category_id", "valid_from"], notification_settings: [] };
+
 async function dump(admin: Admin, table: string) {
   const rows: unknown[] = [];
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await admin.from(table).select("*").range(from, from + 999);
+    let q = admin.from(table).select("*");
+    for (const col of ORDER[table] ?? ["id"]) q = q.order(col);
+    const { data, error } = await q.range(from, from + 999);
     if (error) {
       if (/does not exist|could not find the table/i.test(error.message)) return rows; // migrazione non eseguita
       throw new Error(`${table}: ${error.message}`);

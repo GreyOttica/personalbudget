@@ -4,9 +4,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 const KINDS = [
-  { kind: "daily", label: "Serale", hint: "oggi e mese in corso" },
-  { kind: "weekly", label: "Settimana", hint: "lunedì–domenica scorsi" },
-  { kind: "monthly", label: "Mese", hint: "mese scorso" },
+  { kind: "daily", label: "Serale", hint: "oggi" },
+  { kind: "weekly", label: "Settimana", hint: "la scorsa" },
+  { kind: "monthly", label: "Mese", hint: "lo scorso" },
 ] as const;
 
 /** "Genera ora": in attesa dei job automatici della Fase 5, o per rigenerare. */

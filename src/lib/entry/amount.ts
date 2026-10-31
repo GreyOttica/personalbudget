@@ -25,8 +25,12 @@ export function centsToInput(cents: number): string {
 
 /** Oggi (o oggi meno n giorni) come YYYY-MM-DD nel fuso di Roma. */
 export function romeDate(daysAgo = 0): string {
-  const d = new Date(Date.now() - daysAgo * 86_400_000);
-  return new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE }).format(d);
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE }).format(new Date());
+  if (!daysAgo) return today;
+  // Giorni di calendario, non 24 ore: col cambio dell'ora "ieri" resta ieri.
+  const d = new Date(`${today}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - daysAgo);
+  return d.toISOString().slice(0, 10);
 }
 
 const dayFmt = new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });

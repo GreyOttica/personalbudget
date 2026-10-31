@@ -19,7 +19,8 @@ function normalizeEmail(value: FormDataEntryValue | null): string {
 export async function requestCode(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const email = normalizeEmail(formData.get("email"));
   if (!email) return { step: "email", email, error: "Inserisci la tua email." };
-  if (email !== ownerEmail()) return { step: "email", email, error: "Questa email non è autorizzata." };
+  // Stessa risposta per qualsiasi email: non si deve poter scoprire quale indirizzo è autorizzato.
+  if (email !== ownerEmail()) return { step: "code", email, info: codeSent(email) };
 
   const supabase = await createClient();
   // shouldCreateUser: false → nessuna registrazione dal login, l'utente esiste già.
@@ -42,8 +43,10 @@ export async function requestCode(_prev: LoginState, formData: FormData): Promis
           : `Invio del codice non riuscito: ${error.message}`,
     };
   }
-  return { step: "code", email, info: `Ti ho mandato un codice a ${email}.` };
+  return { step: "code", email, info: codeSent(email) };
 }
+
+const codeSent = (email: string) => `Se ${email} è l'indirizzo autorizzato, ti arriva un codice entro un minuto. Controlla anche lo spam.`;
 
 async function siteOrigin(): Promise<string> {
   const h = await headers();

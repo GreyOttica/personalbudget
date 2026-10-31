@@ -37,15 +37,17 @@ export function buildProposal(
     const r = row.get(c.id);
     const from = r?.budget ?? null;
     const average = r?.average ?? 0;
-    const to = change.has(c.id) ? change.get(c.id)! : from;
+    // 0 = togli il budget: la categoria torna "senza budget" e nella stima conta la sua media.
+    const to = change.has(c.id) ? change.get(c.id)! || null : from;
     current += from ?? 0;
     proposed += to ?? 0;
     expected += to ?? average; // senza budget conta la media
     if (change.has(c.id) && to !== from) {
-      items.push({ category_id: c.id, name: c.name, emoji: c.emoji, from_cents: from, to_cents: to!, average_cents: average, fixed: c.is_fixed });
-      if (c.is_fixed && to! < average * 0.95) avvisi.push(`${c.name} è una spesa fissa: un budget di ${eur(to!)} € è sotto quanto spendi di solito (${eur(average)} €).`);
-      else if (!c.is_fixed && average > 0 && to! < average * 0.5)
-        avvisi.push(`${c.name}: ${eur(to!)} € è meno della metà della tua media (${eur(average)} €), taglio molto difficile da rispettare.`);
+      items.push({ category_id: c.id, name: c.name, emoji: c.emoji, from_cents: from, to_cents: to ?? 0, average_cents: average, fixed: c.is_fixed });
+      if (to === null) continue;
+      if (c.is_fixed && to < average * 0.95) avvisi.push(`${c.name} è una spesa fissa: un budget di ${eur(to)} € è sotto quanto spendi di solito (${eur(average)} €).`);
+      else if (!c.is_fixed && average > 0 && to < average * 0.5)
+        avvisi.push(`${c.name}: ${eur(to)} € è meno della metà della tua media (${eur(average)} €), taglio molto difficile da rispettare.`);
     }
   }
   const income = d.averages.income;

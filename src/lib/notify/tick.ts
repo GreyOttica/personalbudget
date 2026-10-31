@@ -23,11 +23,24 @@ type Settings = {
 const DEFAULTS: Settings = { budget_alerts: true, projections: true, reminder: true, daily_analysis: true, weekly_report: true, monthly_report: true, backup: true };
 const MAX_ALERTS_PER_TICK = 3;
 
+/** Un job prenotato ma mai concluso (funzione interrotta dal timeout) si può riprendere dopo 10 minuti. */
+const STALE_MS = 10 * 60_000;
+
 /** "Prenota" una chiave: vero solo per il primo che la scrive, così nessun job parte due volte. */
-async function claim(admin: Admin, key: string, kind: string) {
+async function claim(admin: Admin, key: string, kind: string, retryStale = false) {
   const { data, error } = await admin.from("notification_log").upsert({ key, kind }, { onConflict: "key", ignoreDuplicates: true }).select("key");
   if (error) throw new Error(error.message);
-  return (data ?? []).length > 0;
+  if ((data ?? []).length > 0) return true;
+  if (!retryStale) return false;
+  // Già prenotato: lo riprendo solo se è rimasto a metà (nessun titolo) da più di 10 minuti.
+  const { data: taken } = await admin
+    .from("notification_log")
+    .update({ created_at: new Date().toISOString() })
+    .eq("key", key)
+    .is("title", null)
+    .lt("created_at", new Date(Date.now() - STALE_MS).toISOString())
+    .select("key");
+  return (taken ?? []).length > 0;
 }
 const release = (admin: Admin, key: string) => admin.from("notification_log").delete().eq("key", key);
 const record = (admin: Admin, key: string, title: string, body: string, sent: number) =>
@@ -86,7 +99,7 @@ export async function runTick(at = new Date()) {
     if (!enabled) continue;
     const isAi = job.kind === "daily" || job.kind === "weekly" || job.kind === "monthly";
     if (isAi && (aiUsed || !aiConfigured())) continue;
-    if (!(await claim(admin, job.key, job.kind))) continue;
+    if (!(await claim(admin, job.key, job.kind, true))) continue;
     try {
       if (job.kind === "reminder") {
         const { count } = await admin

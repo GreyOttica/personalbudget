@@ -380,7 +380,8 @@ export function factsFor(kind: AnalysisKind, input: FactsInput) {
 export function factNumbers(facts: unknown): Set<number> {
   const out = new Set<number>();
   const walk = (v: unknown) => {
-    if (typeof v === "number") out.add(Math.round(v * 10) / 10);
+    // Valore assoluto: nel testo "-150 €" si legge 150 (il segno lo dà la frase).
+    if (typeof v === "number") out.add(Math.abs(Math.round(v * 10) / 10));
     else if (typeof v === "string") for (const n of numbersIn(v)) out.add(n);
     else if (Array.isArray(v)) v.forEach(walk);
     else if (v && typeof v === "object") Object.values(v).forEach(walk);
@@ -415,7 +416,7 @@ export function unknownNumbers(text: string, known: Set<number>): number[] {
 
 /**
  * Saldo previsto a fine `targetMonth`: saldo stimato di oggi + quanto si muoverà
- * ancora il mese in corso (spese e investimenti stimati non ancora registrati) +
+ * ancora il mese in corso (entrate attese, spese e investimenti stimati non ancora registrati) +
  * risparmio netto medio dei mesi completi (entrate − spese − investimenti) per
  * ogni mese successivo. Con `spendEuro`, quanto resterebbe dopo quella spesa.
  */
@@ -425,7 +426,7 @@ export function projection(input: FactsInput, targetMonth: string, spendEuro?: n
   const m = monthFacts(input, current);
   const d = m._d;
   const remainingThisMonth = d.forecast
-    ? -(d.forecast.expense - d.totals.expense) - (d.forecast.investment - d.totals.investment)
+    ? d.forecast.income - d.totals.income - (d.forecast.expense - d.totals.expense) - (d.forecast.investment - d.totals.investment)
     : 0;
   const history = d.trend.filter((p) => p.month < current).slice(-6);
   const netAvg = history.length ? history.reduce((s, p) => s + (p.income - p.expense - p.investment), 0) / history.length : 0;

@@ -130,7 +130,9 @@ function Hero({ d, monthName }: { d: Dashboard; monthName: string }) {
       {budget.total > 0 ? (
         <>
           <p className="muted">
-            su {formatEuros(budget.total)} di budget · {formatPercent(budget.ratio ?? 0)}
+            {budget.spent === d.totals.expense
+              ? `su ${formatEuros(budget.total)} di budget · ${formatPercent(budget.ratio ?? 0)}`
+              : `Categorie con budget: ${formatEuros(budget.spent)} su ${formatEuros(budget.total)} · ${formatPercent(budget.ratio ?? 0)}`}
           </p>
           <Meter
             ratio={budget.ratio ?? 0}

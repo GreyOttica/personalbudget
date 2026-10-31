@@ -45,6 +45,13 @@ export async function saveRule(input: RuleInput): Promise<RuleResult> {
   if (!["expense", "income", "investment"].includes(input.type)) return { ok: false, error: "Tipo non valido." };
 
   const supabase = await createClient();
+  // Riattivando un ricorrente in pausa si riparte dal mese in corso: niente addebiti per i mesi di pausa.
+  let startsOn = input.startsOn;
+  if (input.id && input.active) {
+    const { data: prev } = await supabase.from("recurring_rules").select("active").eq("id", input.id).maybeSingle();
+    const monthStart = `${romeDate().slice(0, 7)}-01`;
+    if (prev && !prev.active && startsOn < monthStart) startsOn = monthStart;
+  }
   const row = {
     name,
     type: input.type,
@@ -53,7 +60,7 @@ export async function saveRule(input: RuleInput): Promise<RuleResult> {
     subcategory_id: input.subcategoryId,
     account_id: input.accountId,
     day_of_month: input.dayOfMonth,
-    starts_on: input.startsOn,
+    starts_on: startsOn,
     active: input.active,
   };
   const { error } = input.id

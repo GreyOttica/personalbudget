@@ -103,7 +103,7 @@ export type Dashboard = {
   day: number; // giorno del mese di oggi (solo mese in corso), altrimenti giorni del mese
   daysInMonth: number;
   totals: { income: number; expense: number; fixed: number; variable: number; investment: number; savingsRate: number | null };
-  forecast: { expense: number; fixed: number; variable: number; investment: number; savingsRate: number | null } | null;
+  forecast: { expense: number; fixed: number; variable: number; investment: number; income: number; savingsRate: number | null } | null;
   budget: { total: number; spent: number; ratio: number | null; status: BudgetStatus; forecastStatus: BudgetStatus };
   averages: { expense: number; income: number; savingsRate: number | null; months: number };
   categories: CategoryRow[];
@@ -282,12 +282,19 @@ export function buildDashboard(input: {
     const fInvest = investRules.length
       ? cur.investment + investRules.reduce((s, r) => s + (r.pendingThisMonth ? r.amount_cents : 0), 0)
       : Math.max(cur.investment, investedBy.get(prevMonth) ?? 0);
+    // Entrate attese: ricorrenti di entrata ancora da arrivare, altrimenti almeno quelle del mese scorso
+    // (lo stipendio di solito arriva una volta sola, spesso a fine mese).
+    const incomeRules = rules.filter((r) => r.type === "income");
+    const fIncome = incomeRules.length
+      ? cur.income + incomeRules.reduce((s, r) => s + (r.pendingThisMonth ? r.amount_cents : 0), 0)
+      : Math.max(cur.income, perMonth.get(prevMonth)?.income ?? 0);
     forecast = {
       expense: fFixed + fVariable,
       fixed: fFixed,
       variable: fVariable,
       investment: fInvest,
-      savingsRate: rate(cur.income, fFixed + fVariable),
+      income: fIncome,
+      savingsRate: rate(fIncome, fFixed + fVariable),
     };
     const budgetedForecast = rows.reduce((s, r) => s + (r.budget !== null ? (r.forecast ?? 0) : 0), 0);
     forecastStatus = budgetTotal ? statusOf(budgetedForecast / budgetTotal) : "none";
