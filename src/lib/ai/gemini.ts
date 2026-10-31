@@ -65,17 +65,19 @@ async function call(model: string, body: Record<string, unknown>): Promise<Gemin
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(90_000),
+      signal: AbortSignal.timeout(50_000), // più tentativi devono stare nei 120 s della funzione
       cache: "no-store",
     });
     if (res.ok) return { ...((await res.json()) as GeminiResponse), model: current };
     const text = await res.text();
-    if ((res.status === 429 || res.status >= 500) && attempt < 2) {
-      // Quota esaurita: dopo il primo tentativo passo al modello Lite, che ha una quota separata.
-      if (res.status === 429 && attempt === 1 && current !== LITE) current = LITE;
-      else await new Promise((r) => setTimeout(r, res.status === 429 ? retryDelayMs(text) : 2000));
+    const busy = res.status === 429 || res.status >= 500; // quota finita o server sovraccarico
+    if (busy && attempt < 3) {
+      // Un nuovo tentativo sullo stesso modello, poi passo al Lite (quota e server separati).
+      if (attempt >= 1 && current !== LITE) current = LITE;
+      else await new Promise((r) => setTimeout(r, res.status === 429 ? retryDelayMs(text) : 2500 * (attempt + 1)));
       continue;
     }
+    if (res.status >= 500) throw new AiError("I server di Google Gemini sono sovraccarichi in questo momento. Riprova tra qualche minuto.");
     if (res.status === 429) throw new AiError("Raggiunto il limite gratuito di Gemini (richieste al minuto o al giorno). Riprova tra un po'.");
     if (res.status === 400 && /API key not valid|API_KEY_INVALID/i.test(text)) throw new AiError("La chiave GEMINI_API_KEY non è valida: ricontrollala su Vercel.");
     if (res.status === 403) throw new AiError("Gemini ha rifiutato la chiave (403): controlla che sia di Google AI Studio e che l'API sia attiva.");
