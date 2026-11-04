@@ -3206,3 +3206,29 @@ input[aria-invalid="true"] {
   flex: 1;
   margin: 0;
 }
+
+/* Home snella: collegamento ai grafici */
+.charts-link {
+  text-decoration: none;
+  color: inherit;
+  margin-top: 14px;
+}
+.dash .back-link + .dash-top {
+  margin-top: 4px;
+}
+.hero-note summary {
+  cursor: pointer;
+  list-style: none;
+}
+.hero-note summary::-webkit-details-marker {
+  display: none;
+}
+.hero-note summary::after {
+  content: " ›";
+}
+.hero-note[open] summary::after {
+  content: " ⌄";
+}
+.hero-note p {
+  margin: 6px 0 0;
+}

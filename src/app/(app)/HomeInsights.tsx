@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Donut, Sankey, slotColor, type FlowNode } from "@/components/charts/more";
-import type { CategoryRow, Dashboard, SubcategoryRow } from "@/lib/analytics/dashboard";
+import type { Dashboard, SubcategoryRow } from "@/lib/analytics/dashboard";
 import type { Slice, SmallSpend } from "@/lib/analytics/insights";
 import { formatEuros, formatPercent } from "@/lib/format";
 
@@ -105,58 +105,6 @@ export function Composition({
 }
 
 // --- rispetto al solito ---------------------------------------------------------
-
-export function VersusUsual({ rows, isCurrentMonth, months }: { rows: CategoryRow[]; isCurrentMonth: boolean; months: number }) {
-  const [all, setAll] = useState(false);
-  if (!months) return <p className="muted">Serve almeno un mese completo di storico per il confronto.</p>;
-  // Mese in corso: confronto la stima di fine mese, non lo speso parziale.
-  const items = rows
-    .map((r) => {
-      const value = isCurrentMonth ? (r.forecast ?? r.spent) : r.spent;
-      return { ...r, value, delta: value - r.average };
-    })
-    .filter((r) => r.average > 0 || r.value > 0)
-    .filter((r) => Math.abs(r.delta) >= 500) // differenze sotto i 5 € non sono una notizia
-    .sort((a, b) => b.delta - a.delta);
-  if (!items.length) return <p className="muted">Tutte le categorie sono in linea con la tua media.</p>;
-  const shown = all ? items : [...items.filter((i) => i.delta > 0).slice(0, 4), ...items.filter((i) => i.delta < 0).slice(-3)];
-  const max = Math.max(...items.map((i) => Math.abs(i.delta)));
-
-  return (
-    <div className="card card-padded">
-      <p className="muted small">
-        {isCurrentMonth ? "Stima di fine mese" : "Speso nel mese"} rispetto alla media degli ultimi {months} {months === 1 ? "mese" : "mesi"}.
-      </p>
-      <ul className="versus">
-        {shown.map((r) => {
-          const up = r.delta > 0;
-          return (
-            <li key={r.id} className="versus-row">
-              <span className="versus-name">
-                {r.emoji} {r.name}
-              </span>
-              <div className="versus-bar" aria-hidden>
-                <div className="versus-half neg">{!up && <span style={{ width: `${(Math.abs(r.delta) / max) * 100}%` }} />}</div>
-                <div className="versus-half pos">{up && <span style={{ width: `${(r.delta / max) * 100}%` }} />}</div>
-              </div>
-              <span className={`versus-delta ${up ? "delta-bad" : "delta-good"}`}>
-                <span aria-hidden>{up ? "▲" : "▼"}</span> {up ? "+" : "−"}
-                {formatEuros(Math.abs(r.delta))}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-      {items.length > shown.length || all ? (
-        <button type="button" className="link-button small" onClick={() => setAll(!all)}>
-          {all ? "Mostra meno" : `Mostra tutte (${items.length})`}
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-// --- piccole spese -----------------------------------------------------------------
 
 export function SmallSpends({ items, total, count }: { items: SmallSpend[]; total: number; count: number }) {
   if (!items.length) return <p className="muted">Nessuna piccola spesa ripetuta questo mese.</p>;

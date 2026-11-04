@@ -1,28 +1,24 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Meter, StatusLabel } from "@/components/Meter";
+import { MonthSwitch } from "@/components/MonthSwitch";
 import { SyncBadge } from "@/components/SyncBadge";
-import { addMonths, monthOf, type Dashboard } from "@/lib/analytics/dashboard";
+import { monthOf, type Dashboard } from "@/lib/analytics/dashboard";
 import { loadDashboard, parseMonth } from "@/lib/analytics/load";
 import { romeDate } from "@/lib/entry/amount";
-import { formatEuros, formatMonth, formatMonthName, formatPercent, formatProbability } from "@/lib/format";
-import { categoryColorSlots, composition, smallSpends } from "@/lib/analytics/insights";
-import { DailyFocus, TrendCharts } from "./DashboardCharts";
+import { formatEuros, formatMonthName, formatPercent, formatProbability } from "@/lib/format";
+import { TodaySummary } from "./DashboardCharts";
 import { KIND_LABEL, periodLabel, type AnalysisRow } from "@/components/AnalysisCard";
 import { createClient } from "@/lib/supabase/server";
 import { budgetSignals, type BudgetSignal } from "@/lib/analytics/alerts";
 import type { Accuracy, Prediction } from "@/lib/analytics/predict";
-import { Composition, MonthFlow, SmallSpends, VersusUsual } from "./HomeInsights";
 
 export const metadata: Metadata = { title: "Home" };
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ m?: string }> }) {
   const { m } = await searchParams;
   const month = parseMonth(m);
-  const { dashboard: d, categories, subcategories, txns, prediction, accuracy } = await loadDashboard(month);
-  const slots = categoryColorSlots(txns, month);
-  const comp = composition(txns, categories, month, slots);
-  const small = smallSpends(txns, categories, subcategories, month);
+  const { dashboard: d, prediction, accuracy } = await loadDashboard(month);
   const current = monthOf(romeDate());
   const monthName = formatMonthName(month);
   const empty = d.trend.length === 0;
@@ -32,25 +28,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
   return (
     <main className="page dash">
       <header className="dash-top">
-        <nav className="month-switch" aria-label="Cambia mese">
-          <Link href={`/?m=${addMonths(month, -1)}`} className="month-arrow" aria-label="Mese precedente">
-            ‹
-          </Link>
-          <h1>{formatMonth(`${month}-01`)}</h1>
-          {month < current ? (
-            <Link
-              href={month === addMonths(current, -1) ? "/" : `/?m=${addMonths(month, 1)}`}
-              className="month-arrow"
-              aria-label="Mese successivo"
-            >
-              ›
-            </Link>
-          ) : (
-            <span className="month-arrow disabled" aria-hidden>
-              ›
-            </span>
-          )}
-        </nav>
+        <MonthSwitch month={month} current={current} base="/" />
         <SyncBadge />
       </header>
 
@@ -68,47 +46,26 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
           <Tiles d={d} />
           {signals.length > 0 && <Alerts signals={signals} />}
           {latestAi && <AiCard a={latestAi} />}
-          <section className="section">
-            <div className="section-head">
-              <h2>Giorno per giorno</h2>
-            </div>
-            <DailyFocus daily={d.daily} isCurrentMonth={d.isCurrentMonth} quota={prediction?.quota ?? null} />
-          </section>
-          <section className="section">
-            <div className="section-head">
-              <h2>Dove vanno i soldi</h2>
-              <span className="muted small">{monthName}</span>
-            </div>
-            <Composition slices={comp.slices} total={comp.total} other={comp.other} subcategories={d.subcategories} />
-          </section>
-          <section className="section">
-            <div className="section-head">
-              <h2>Rispetto al solito</h2>
-            </div>
-            <VersusUsual rows={d.categories} isCurrentMonth={d.isCurrentMonth} months={d.averages.months} />
-          </section>
-          <section className="section">
-            <div className="section-head">
-              <h2>Piccole spese che si sommano</h2>
-            </div>
-            <SmallSpends items={small.items} total={small.total} count={small.count} />
-          </section>
-          <section className="section">
-            <div className="section-head">
-              <h2>Flusso del mese</h2>
-            </div>
-            <MonthFlow d={d} slots={Object.fromEntries(slots)} />
-          </section>
-          <section className="section">
-            <div className="section-head">
-              <h2>Andamento</h2>
-              <span className="muted small">ultimi {d.trend.length} mesi</span>
-            </div>
-            <TrendCharts trend={d.trend} selected={month} />
-          </section>
-          <p className="muted small more-analysis">
-            Altre analisi in <Link href="/altro">Altro</Link>: anno, saldo del conto, categorie nel tempo, ricorrenti, viaggi e obiettivi.
-          </p>
+          {d.isCurrentMonth && d.daily.today && (
+            <section className="section">
+              <div className="section-head">
+                <h2>Oggi</h2>
+              </div>
+              <TodaySummary daily={d.daily} quota={prediction?.quota ?? null} />
+            </section>
+          )}
+          <Link href={month === current ? "/grafici" : `/grafici?m=${month}`} className="card menu-row charts-link">
+            <span className="menu-icon" aria-hidden>
+              📊
+            </span>
+            <span className="menu-main">
+              <strong>Grafici del mese</strong>
+              <span className="muted small">Giorno per giorno, dove vanno i soldi, piccole spese, flusso, andamento</span>
+            </span>
+            <span className="chevron" aria-hidden>
+              ›
+            </span>
+          </Link>
         </>
       )}
     </main>
@@ -177,11 +134,20 @@ function Hero({ d, monthName, p, accuracy }: { d: Dashboard; monthName: string; 
               </span>
             </div>
           )}
-          <p className="muted small hero-note">
-            Fisse {formatEuros(forecast.fixed)} (ricorrenti o, se mancano, come il mese scorso). Variabili{" "}
-            {formatEuros(forecast.variable)}: {p ? `simulazione su ${p.historyDays} giorni del tuo storico, con più peso ai giorni recenti e al giorno della settimana` : "ritmo attuale corretto con la tua media"}.
-            {accuracy?.error != null && accuracy.months >= 2 && ` Verificata sugli ultimi ${accuracy.months} mesi: a metà mese sbaglia in media del ${Math.round(accuracy.error * 100)}%.`}
-          </p>
+          <details className="muted small hero-note">
+            <summary>
+              Fisse {formatEuros(forecast.fixed)} + variabili {formatEuros(forecast.variable)}
+              {accuracy?.error != null && accuracy.months >= 2 ? ` · precisione ±${Math.round(accuracy.error * 100)}%` : ""} · Come è calcolata
+            </summary>
+            <p>
+              Le spese fisse vengono dai ricorrenti o, se mancano, dal mese scorso: non si proiettano.{" "}
+              {p
+                ? `Le variabili da una simulazione su ${p.historyDays} giorni del tuo storico, con più peso ai giorni recenti e al giorno della settimana.`
+                : "Le variabili dal ritmo attuale corretto con la tua media."}
+              {accuracy?.error != null && accuracy.months >= 2 &&
+                ` Rifatta a metà di ciascuno degli ultimi ${accuracy.months} mesi, ha sbagliato in media del ${Math.round(accuracy.error * 100)}%.`}
+            </p>
+          </details>
         </>
       )}
     </section>
