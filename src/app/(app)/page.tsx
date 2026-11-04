@@ -7,7 +7,9 @@ import { monthOf, type Dashboard } from "@/lib/analytics/dashboard";
 import { loadDashboard, parseMonth } from "@/lib/analytics/load";
 import { romeDate } from "@/lib/entry/amount";
 import { formatEuros, formatMonthName, formatPercent, formatProbability } from "@/lib/format";
-import { TodaySummary } from "./DashboardCharts";
+import { DailyFocus } from "./DashboardCharts";
+import { Composition } from "./HomeInsights";
+import { categoryColorSlots, composition } from "@/lib/analytics/insights";
 import { KIND_LABEL, periodLabel, type AnalysisRow } from "@/components/AnalysisCard";
 import { createClient } from "@/lib/supabase/server";
 import { budgetSignals, type BudgetSignal } from "@/lib/analytics/alerts";
@@ -18,7 +20,8 @@ export const metadata: Metadata = { title: "Home" };
 export default async function Home({ searchParams }: { searchParams: Promise<{ m?: string }> }) {
   const { m } = await searchParams;
   const month = parseMonth(m);
-  const { dashboard: d, prediction, accuracy } = await loadDashboard(month);
+  const { dashboard: d, categories, txns, prediction, accuracy } = await loadDashboard(month);
+  const comp = composition(txns, categories, month, categoryColorSlots(txns, month));
   const current = monthOf(romeDate());
   const monthName = formatMonthName(month);
   const empty = d.trend.length === 0;
@@ -46,21 +49,26 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
           <Tiles d={d} />
           {signals.length > 0 && <Alerts signals={signals} />}
           {latestAi && <AiCard a={latestAi} />}
-          {d.isCurrentMonth && d.daily.today && (
-            <section className="section">
-              <div className="section-head">
-                <h2>Oggi</h2>
-              </div>
-              <TodaySummary daily={d.daily} quota={prediction?.quota ?? null} />
-            </section>
-          )}
+          <section className="section">
+            <div className="section-head">
+              <h2>Giorno per giorno</h2>
+            </div>
+            <DailyFocus daily={d.daily} isCurrentMonth={d.isCurrentMonth} quota={prediction?.quota ?? null} />
+          </section>
+          <section className="section">
+            <div className="section-head">
+              <h2>Dove vanno i soldi</h2>
+              <span className="muted small">{monthName}</span>
+            </div>
+            <Composition slices={comp.slices} total={comp.total} other={comp.other} subcategories={d.subcategories} />
+          </section>
           <Link href={month === current ? "/grafici" : `/grafici?m=${month}`} className="card menu-row charts-link">
             <span className="menu-icon" aria-hidden>
               📊
             </span>
             <span className="menu-main">
               <strong>Grafici del mese</strong>
-              <span className="muted small">Giorno per giorno, dove vanno i soldi, piccole spese, flusso, andamento</span>
+              <span className="muted small">Piccole spese, flusso del mese, andamento degli ultimi 12 mesi</span>
             </span>
             <span className="chevron" aria-hidden>
               ›

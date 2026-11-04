@@ -72,27 +72,7 @@ const PER_DAY: Series = { key: "amount", name: "Spese", color: "var(--series-exp
 
 type View = "pace" | "calendar" | "days" | "week";
 
-/** Oggi: quota del giorno dalla previsione statistica (o, senza, quanto resta al giorno). Per la Home. */
-export function TodaySummary({ daily, quota }: { daily: Daily; quota?: Quota | null }) {
-  if (!daily.today) return null;
-  return (
-    <div className="card card-padded daily">
-      {quota ? <QuotaCard today={daily.today} quota={quota} /> : <TodayCard today={daily.today} source={daily.variableTargetSource} />}
-    </div>
-  );
-}
-
-export function DailyFocus({
-  daily,
-  isCurrentMonth,
-  quota,
-  showToday = true,
-}: {
-  daily: Daily;
-  isCurrentMonth: boolean;
-  quota?: Quota | null;
-  showToday?: boolean;
-}) {
+export function DailyFocus({ daily, isCurrentMonth, quota }: { daily: Daily; isCurrentMonth: boolean; quota?: Quota | null }) {
   const [view, setView] = useState<View>("pace");
   const [withFixed, setWithFixed] = useState(false);
   const n = daily.days.length;
@@ -135,7 +115,7 @@ export function DailyFocus({
 
   return (
     <div className="card card-padded daily">
-      {showToday && daily.today && (quota ? <QuotaCard today={daily.today} quota={quota} /> : <TodayCard today={daily.today} source={daily.variableTargetSource} />)}
+      {daily.today && (quota ? <QuotaCard today={daily.today} quota={quota} /> : <TodayCard today={daily.today} source={daily.variableTargetSource} />)}
       <div className="segmented" role="tablist" aria-label="Vista giornaliera">
         {(
           [

@@ -12,7 +12,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
   {
     title: "Analisi",
     items: [
-      { href: "/grafici", icon: "📊", title: "Grafici del mese", hint: "Giorno per giorno, dove vanno i soldi, piccole spese, andamento" },
+      { href: "/grafici", icon: "📊", title: "Grafici del mese", hint: "Piccole spese, flusso del mese, andamento degli ultimi 12 mesi" },
       { href: "/analisi", icon: "🧠", title: "Analisi AI", hint: "Serale, settimanale e mensile, con consigli" },
       { href: "/chat", icon: "💬", title: "Chiedi all'assistente", hint: "«Posso permettermi un viaggio da 800 € a dicembre?»" },
       { href: "/anno", icon: "📅", title: "Riepilogo dell'anno", hint: "Totali, mesi migliori e peggiori, confronto con l'anno prima" },

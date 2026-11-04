@@ -2,24 +2,21 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { MonthSwitch } from "@/components/MonthSwitch";
 import { monthOf } from "@/lib/analytics/dashboard";
-import { categoryColorSlots, composition, smallSpends } from "@/lib/analytics/insights";
+import { categoryColorSlots, smallSpends } from "@/lib/analytics/insights";
 import { loadDashboard, parseMonth } from "@/lib/analytics/load";
 import { romeDate } from "@/lib/entry/amount";
-import { formatMonthName } from "@/lib/format";
-import { DailyFocus, TrendCharts } from "../DashboardCharts";
-import { Composition, MonthFlow, SmallSpends } from "../HomeInsights";
+import { TrendCharts } from "../DashboardCharts";
+import { MonthFlow, SmallSpends } from "../HomeInsights";
 
 export const metadata: Metadata = { title: "Grafici" };
 
-/** I grafici del mese, spostati dalla Home: giorno per giorno, composizione, piccole spese, flusso, andamento. */
+/** Grafici di approfondimento (giorno per giorno e composizione restano in Home): piccole spese, flusso, andamento. */
 export default async function ChartsPage({ searchParams }: { searchParams: Promise<{ m?: string }> }) {
   const { m } = await searchParams;
   const month = parseMonth(m);
   const { dashboard: d, categories, subcategories, txns } = await loadDashboard(month);
   const slots = categoryColorSlots(txns, month);
-  const comp = composition(txns, categories, month, slots);
   const small = smallSpends(txns, categories, subcategories, month);
-  const monthName = formatMonthName(month);
 
   return (
     <main className="page dash">
@@ -36,19 +33,6 @@ export default async function ChartsPage({ searchParams }: { searchParams: Promi
         </section>
       ) : (
         <>
-          <section className="section">
-            <div className="section-head">
-              <h2>Giorno per giorno</h2>
-            </div>
-            <DailyFocus daily={d.daily} isCurrentMonth={d.isCurrentMonth} showToday={false} />
-          </section>
-          <section className="section">
-            <div className="section-head">
-              <h2>Dove vanno i soldi</h2>
-              <span className="muted small">{monthName}</span>
-            </div>
-            <Composition slices={comp.slices} total={comp.total} other={comp.other} subcategories={d.subcategories} />
-          </section>
           <section className="section">
             <div className="section-head">
               <h2>Piccole spese che si sommano</h2>
