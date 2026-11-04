@@ -721,3 +721,22 @@ test("parseAmount: punto delle migliaia all'italiana", async () => {
   assert.equal(parseAmount("1.234.567"), 123456700);
   assert.equal(parseAmount("2,80"), 280);
 });
+
+// --- Abbonamenti ---------------------------------------------------------------------------
+import { subscriptionEvents } from "../src/lib/notify/subscriptions.ts";
+
+test("abbonamenti: aumento recente e nuovo, niente avvisi al primo controllo", () => {
+  const r = (o: object) => ({ categoryId: "abb", subcategoryId: "spo", name: "Spotify", emoji: "🔁", typical: 1099, last: 1199, previous: 1099, changed: true, months: 5, yearly: 13188, lastDate: "2026-11-02", nextDate: "2026-12-02", ...o });
+  const first = subscriptionEvents([r({})], "2026-11-04", null);
+  assert.deepEqual(first.events.map((e) => e.kind), ["sub_up"], "al primo controllo solo gli aumenti, non i 'nuovi'");
+  assert.match(first.events[0].body, /Da 10,99\s€ a 11,99\s€: 12\s€ in più l'anno/);
+  assert.equal(first.events[0].key, "sub_up:abb|spo:1199");
+  const later = subscriptionEvents([r({ changed: false }), r({ subcategoryId: "net", name: "Netflix", changed: false })], "2026-11-04", new Set(["sub_seen:abb|spo", "sub_seed"]));
+  assert.deepEqual(later.events.map((e) => e.key), ["sub_new:abb|net"]);
+  assert.equal(subscriptionEvents([r({ lastDate: "2026-09-01" })], "2026-11-04", new Set(["sub_seen:abb|spo"])).events.length, 0, "aumento vecchio: niente avviso");
+});
+
+test("abbonamenti: un aumento grande non è un aumento di abbonamento", () => {
+  const r = { categoryId: "cura", subcategoryId: "cap", name: "Taglio capelli", emoji: "💇", typical: 2000, last: 3400, previous: 2000, changed: true, months: 4, yearly: 24000, lastDate: "2026-11-02", nextDate: "2026-12-02" };
+  assert.equal(subscriptionEvents([r], "2026-11-04", new Set(["sub_seen:cura|cap", "sub_seed"])).events.length, 0);
+});

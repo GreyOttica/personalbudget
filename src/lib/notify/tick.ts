@@ -2,6 +2,8 @@ import "server-only";
 import { budgetSignals, signalText } from "@/lib/analytics/alerts";
 import { monthOf } from "@/lib/analytics/dashboard";
 import { tagBudgetStatus } from "@/lib/analytics/tags";
+import { recurring } from "@/lib/analytics/insights";
+import { subscriptionEvents } from "./subscriptions";
 import { formatEuros, formatProbability } from "@/lib/format";
 import { predictionFor } from "@/lib/ai/facts";
 import { loadAll } from "@/lib/analytics/loadAll";
@@ -110,6 +112,27 @@ export async function runTick(at = new Date()) {
       await record(admin, key, title, body, await sendPush(admin, { title, body, url: `/viaggi?tag=${encodeURIComponent(st.tag)}`, tag: `trip-${st.tag}` }));
       done.push(key);
     }
+  }
+
+  // 1c. Abbonamenti: una volta al giorno, aumenti di prezzo e nuove spese ricorrenti riconosciute.
+  if (alertsAllowed(t) && settings.budget_alerts && (await claim(admin, `subs:${t.date}`, "subs_check"))) {
+    const input = await data();
+    const detected = recurring(input.txns, input.categories, input.subcategories, t.date);
+    const { data: known } = await admin.from("notification_log").select("key").like("key", "sub_%");
+    const keys = new Set((known ?? []).map((r) => r.key as string));
+    // Primo controllo: registro gli abbonamenti che ci sono già senza avvisare.
+    const { events, seenKeys } = subscriptionEvents(detected, t.date, keys.has("sub_seed") ? keys : null);
+    const fresh = [...seenKeys, "sub_seed"].filter((k) => !keys.has(k)).map((key) => ({ key, kind: "sub_seen" }));
+    if (fresh.length) await admin.from("notification_log").upsert(fresh, { onConflict: "key", ignoreDuplicates: true });
+    let n = 0;
+    for (const e of events) {
+      if (n >= 2) break;
+      if (!(await claim(admin, e.key, e.kind))) continue;
+      await record(admin, e.key, e.title, e.body, await sendPush(admin, { title: e.title, body: e.body, url: "/ricorrenti", tag: e.key }));
+      done.push(e.key);
+      n++;
+    }
+    await record(admin, `subs:${t.date}`, "", "", 0);
   }
 
   // 1b. Obiettivi a rischio: dal giorno 10, una volta al mese, se coprire le quote è improbabile.

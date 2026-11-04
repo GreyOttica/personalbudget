@@ -156,6 +156,7 @@ export function RecurringManager(props: Props) {
                     <span className="muted small">
                       {d.months} mesi su 6 · ultimo il {fmtDay(d.lastDate)}
                       {d.changed && d.previous !== null ? ` · era ${formatCents(d.previous)}` : ""}
+                      {d.changed && d.previous !== null && d.last > d.previous && d.last - d.previous <= d.previous * 0.35 && <span className="pill pill-warn">aumentato</span>}
                     </span>
                   </div>
                   <span className="list-amount">{formatCents(d.last)}</span>

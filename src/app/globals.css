@@ -3378,3 +3378,25 @@ input[aria-invalid="true"] {
 .warn-text {
   color: var(--warning-text, #b25000);
 }
+
+/* Abbonamenti */
+.subs-summary {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.subs-summary p {
+  margin: 0;
+}
+.subs-up {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+.pill-warn {
+  margin-left: 6px;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
