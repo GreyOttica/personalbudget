@@ -3400,3 +3400,13 @@ input[aria-invalid="true"] {
   background: var(--warning-bg);
   color: var(--warning-text);
 }
+.backup-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.backup-file {
+  cursor: pointer;
+  justify-self: start;
+}

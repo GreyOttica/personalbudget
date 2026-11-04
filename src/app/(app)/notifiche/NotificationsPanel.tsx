@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore, useTransition } from "react";
-import { backupNow, saveSetting } from "./actions";
+import { backupNow, previewBackup, restoreBackup, saveSetting } from "./actions";
+import { flush } from "@/lib/offline/sync";
 import type { SettingKey } from "./keys";
 
 export type NotifSettings = Record<SettingKey, boolean>;
@@ -74,6 +75,7 @@ export function NotificationsPanel(props: {
   const [subscribed, setSubscribed] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [backupMsg, setBackupMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [settings, setSettings] = useState(props.settings);
   const [, startTransition] = useTransition();
 
@@ -138,6 +140,39 @@ export function NotificationsPanel(props: {
       setMessage({ ok: false, text: "Serve la connessione a internet." });
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function restore(source: { name: string } | { json: string }) {
+    setBackupMsg(null);
+    let when = "";
+    let count = 0;
+    if ("name" in source) {
+      const info = await previewBackup(source.name);
+      if (!info.ok) return setBackupMsg({ ok: false, text: info.message });
+      when = new Date(info.createdAt).toLocaleString("it-IT", { timeZone: "Europe/Rome", dateStyle: "long", timeStyle: "short" });
+      count = info.rows.transactions ?? 0;
+    } else {
+      try {
+        const b = JSON.parse(source.json) as { app?: string; created_at?: string; tables?: { transactions?: unknown[] } };
+        if (b.app !== "personal-budget") return setBackupMsg({ ok: false, text: "Il file non è un backup di questa app." });
+        when = b.created_at ? new Date(b.created_at).toLocaleString("it-IT", { timeZone: "Europe/Rome", dateStyle: "long", timeStyle: "short" }) : "data sconosciuta";
+        count = b.tables?.transactions?.length ?? 0;
+      } catch {
+        return setBackupMsg({ ok: false, text: "Il file non è un JSON valido." });
+      }
+    }
+    const answer = window.prompt(
+      `Ripristinare il backup del ${when} (${count} movimenti)?\n\nTutti i dati attuali verranno sostituiti (prima salvo un backup di adesso). Scrivi RIPRISTINA per confermare.`,
+    );
+    if (answer?.trim().toUpperCase() !== "RIPRISTINA") return setBackupMsg({ ok: false, text: "Ripristino annullato." });
+    setBusy(true);
+    const r = await restoreBackup(source);
+    setBusy(false);
+    setBackupMsg({ ok: r.ok, text: r.message });
+    if (r.ok) {
+      void flush(); // aggiorna anche i dati salvati sul telefono
+      router.refresh();
     }
   }
 
@@ -270,15 +305,20 @@ export function NotificationsPanel(props: {
         ) : (
           <ul className="backup-list">
             {props.backups.map((b) => (
-              <li key={b.name}>
-                {b.url ? (
-                  <a href={b.url} download>
-                    {b.name}
-                  </a>
-                ) : (
-                  b.name
-                )}
-                {b.size !== null && <span className="muted small"> · {Math.round(b.size / 1024)} KB</span>}
+              <li key={b.name} className="backup-row">
+                <span>
+                  {b.url ? (
+                    <a href={b.url} download>
+                      {b.name}
+                    </a>
+                  ) : (
+                    b.name
+                  )}
+                  {b.size !== null && <span className="muted small"> · {Math.round(b.size / 1024)} KB</span>}
+                </span>
+                <button type="button" className="link-button small" disabled={busy} onClick={() => restore({ name: b.name })}>
+                  Ripristina
+                </button>
               </li>
             ))}
           </ul>
@@ -290,14 +330,31 @@ export function NotificationsPanel(props: {
           onClick={async () => {
             setBusy(true);
             const r = await backupNow();
-            setMessage({ ok: r.ok, text: r.message });
+            setBackupMsg({ ok: r.ok, text: r.message });
             setBusy(false);
             router.refresh();
           }}
         >
           Fai un backup adesso
         </button>
-        <p className="muted small">Si tengono gli ultimi 8. Contengono tutti i movimenti: scaricali solo su dispositivi tuoi.</p>
+        {backupMsg && <p className={`small ${backupMsg.ok ? "good-text" : "check-diff"}`}>{backupMsg.text}</p>}
+        <label className="link-button small backup-file">
+          Ripristina da un file…
+          <input
+            type="file"
+            accept="application/json,.json"
+            className="sr-only"
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) await restore({ json: await f.text() });
+            }}
+          />
+        </label>
+        <p className="muted small">
+          Si tengono gli ultimi 12. Contengono tutti i movimenti: scaricali solo su dispositivi tuoi. Il ripristino sostituisce tutti i dati con
+          quelli del backup; prima l&apos;app salva lo stato attuale, così puoi tornare indietro.
+        </p>
       </section>
 
       <h2 className="group-title">Prova su iPhone</h2>

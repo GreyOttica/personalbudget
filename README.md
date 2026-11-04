@@ -33,6 +33,7 @@ scripts/import-sheet.ts import da riga di comando (alternativa alla pagina /impo
    - [`20261101000007_notifications.sql`](supabase/migrations/20261101000007_notifications.sql) (Fase 5: notifiche, controllo automatico, backup, proposte di budget)
    - [`20261101000008_sync_fixes.sql`](supabase/migrations/20261101000008_sync_fixes.sql) (la coda offline non si blocca con sottocategorie nuove)
    - [`20261104000009_predictions.sql`](supabase/migrations/20261104000009_predictions.sql) (obiettivo di risparmio e notifiche positive)
+   - [`20261104000010_closing_tags.sql`](supabase/migrations/20261104000010_closing_tags.sql) (chiusura del mese, budget per viaggi, ripristino da backup)
 3. **Authentication → Emails → Templates → Magic Link**: sostituisci il corpo del messaggio con
    `<p>Il tuo codice di accesso: <strong>{{ .Token }}</strong></p>` e salva.
    L'app usa il codice e non il link, perché su iPhone il link si aprirebbe in Safari e non nella PWA.
@@ -148,6 +149,24 @@ con un anno di dati imparerebbero il rumore.
 - **Notifiche positive** (19–22, al massimo una al giorno): "stai andando bene" se la probabilità di risparmiare almeno
   30 € più del solito è ≥ 75% (dal giorno 8, una volta a settimana) e serie di 5, 10, 15… giorni sotto la quota. Non
   partono se non registri movimenti da più di 2 giorni.
+
+## Strumenti per l'uso quotidiano
+
+- **Inserimento veloce** (`src/lib/entry/suggest.ts`, sul telefono e offline): nel passo Categoria si cerca
+  ("esse", "caff") tra le combinazioni categoria/sottocategoria/nota degli ultimi 6 mesi e il suggerimento compila
+  tutto con l'importo tipico; nel passo Importo gli importi usati di solito; in apertura "I tuoi abituali" in un tocco
+  (frequenza × recenza, niente spese fisse né sopra i 100 €). "1.500" si legge 1500 €.
+- **Chiusura del mese** (`/chiusura`): saldo di oggi confrontato con la banca e salvato come saldo reale, com'è andato
+  il mese, budget proposti per il mese nuovo. Invito in Home nei primi 10 giorni; il report del 1° apre questa pagina.
+- **Obiettivi e previsioni**: arrivo previsto di ogni obiettivo (in ordine di scadenza, con il risparmio previsto del
+  mese e poi quello di solito), probabilità di coprire le quote del mese; se le quote superano l'obiettivo di risparmio,
+  la quota giornaliera parte da quelle. Notifica se sono a rischio (dal giorno 10).
+- **Budget per viaggi ed eventi**: budget per tag con data di fine facoltativa; card in Home durante il viaggio;
+  notifiche all'80% e al superamento.
+- **Abbonamenti**: totale delle spese ricorrenti, aumenti di prezzo (fino al 35%) e nuove spese ricorrenti
+  riconosciute, con notifica. Il primo controllo registra quelle già presenti senza avvisare.
+- **Ripristino da backup** (Notifiche e backup): da un backup salvato o da un file. Sostituisce tutti i dati in una
+  transazione (`restore_backup`); prima viene salvato un backup dello stato attuale. Bisogna scrivere RIPRISTINA.
 
 ## Notifiche, report e backup (Fase 5)
 
