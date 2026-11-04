@@ -10,7 +10,7 @@ export type LogRow = { key: string; kind: string; title: string | null; body: st
 type Backup = { name: string; size: number | null; url: string | null };
 
 const ROWS: { key: SettingKey; title: string; hint: string }[] = [
-  { key: "projections", title: "Proiezioni sul budget", hint: "«Al ritmo attuale sui ristoranti sforerai di 40 €» (dal giorno 5 del mese)" },
+  { key: "projections", title: "Proiezioni sul budget e obiettivi", hint: "«Al ritmo attuale sui ristoranti sforerai di 40 €», obiettivi a rischio (dal giorno 10)" },
   { key: "budget_alerts", title: "Budget all'80% e superato", hint: "Una volta al mese per categoria, tra le 8 e le 22" },
   { key: "positive", title: "Quando vai bene", hint: "«Stai andando bene: risparmi 120 € più del solito», serie di giorni sotto la quota (max 1 al giorno, la sera)" },
   { key: "reminder", title: "Promemoria delle 21:00", hint: "Solo se oggi non hai registrato nulla" },
@@ -30,6 +30,7 @@ const KIND_ICON: Record<string, string> = {
   monthly: "📆",
   backup: "💾",
   positive: "👏",
+  goals_risk: "🏁",
 };
 
 function urlB64ToUint8Array(b64: string) {

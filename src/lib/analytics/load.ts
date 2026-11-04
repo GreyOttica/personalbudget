@@ -33,7 +33,7 @@ export async function loadDashboard(month: string) {
   const current = month === monthOf(romeDate());
   const analyticTxns = all.txns.filter((t) => t.type !== "opening_balance");
   const prediction = current
-    ? predictMonth({ txns: analyticTxns, categories: all.categories, dashboard, today: romeDate(), savingsTarget: all.savingsTarget })
+    ? predictMonth({ txns: analyticTxns, categories: all.categories, dashboard, today: romeDate(), savingsTarget: all.savingsTarget, goals: all.goals })
     : null;
   const accuracy = current ? backtest(analyticTxns, all.categories, month) : null;
   return {
@@ -41,6 +41,7 @@ export async function loadDashboard(month: string) {
     prediction,
     accuracy,
     savingsTarget: all.savingsTarget,
+    goals: all.goals,
     categories: all.categories,
     subcategories: all.subcategories,
     txns: all.txns,

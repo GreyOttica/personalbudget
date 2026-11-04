@@ -658,3 +658,32 @@ test("suggerimenti: abitudini, preferiti, ricerca, importi tipici", () => {
   assert.deepEqual(search("x", txns, "2026-11-04", cats, subs), [], "almeno 2 lettere");
   assert.deepEqual(typicalAmounts(txns, "2026-11-04", "bar", "caffe"), [150, 180]);
 });
+
+// --- Obiettivi collegati alle previsioni ------------------------------------------------
+import { goalForecasts, goalsMonthlyNeed } from "../src/lib/analytics/predict.ts";
+
+test("obiettivi: quote mensili, arrivo previsto in ordine di scadenza, quota giornaliera", () => {
+  const goals = [
+    { id: "pc", name: "PC", emoji: "💻", target_cents: 120000, saved_cents: 0, target_date: "2027-06-30" },
+    { id: "vi", name: "Viaggio", emoji: "✈️", target_cents: 80000, saved_cents: 20000, target_date: "2026-12-31" },
+    { id: "ok", name: "Fatto", emoji: "🎉", target_cents: 1000, saved_cents: 1000, target_date: "2026-12-01" },
+  ];
+  // Viaggio: 600 € in 1 mese (da novembre a dicembre) = 600 €/mese; PC: 1.200 € in 7 mesi = 171,43 €/mese.
+  assert.equal(goalsMonthlyNeed(goals, "2026-11-10"), 60000 + Math.ceil(120000 / 7));
+  const f = new Map(goalForecasts(goals, "2026-11-10", 40000).map((x) => [x.id, x]));
+  assert.equal(f.get("vi")!.eta, "2026-12", "prima il viaggio (scade prima): 400 a novembre + 200 a dicembre");
+  assert.equal(f.get("vi")!.onTime, true);
+  assert.equal(f.get("pc")!.eta, "2027-03", "poi il PC: 200 a dicembre, poi 400 al mese");
+  assert.equal(f.get("ok")!.eta, "2026-11");
+  assert.equal(goalForecasts(goals, "2026-11-10", 0).find((x) => x.id === "vi")!.eta, null, "senza risparmio niente data");
+  // Nella previsione: le quote degli obiettivi alzano l'obiettivo di risparmio e la probabilità di coprirle.
+  const today = "2026-11-10";
+  const { cats, txns } = synthetic(plusDays(today, 1));
+  const d = buildD({ txns, categories: cats, subcategories: [], budgets: [], month: "2026-11", today });
+  const p = predictMonth({ txns, categories: cats, dashboard: d, today, goals: [goals[1]], sims: 300 })!;
+  assert.equal(p.goalsNeed, 60000);
+  assert.ok(p.probGoals !== null && p.probGoals > 0.9, "con circa 670 € di risparmio, 600 € sono quasi certi");
+  const low = predictMonth({ txns, categories: cats, dashboard: d, today, goals: [{ ...goals[1], target_cents: 200000 }], savingsTarget: 10000, sims: 300 })!;
+  assert.equal(low.targetSource, "goals", "le quote (1.800 €) superano l'obiettivo di 100 €");
+  assert.ok(low.probGoals! < 0.05);
+});

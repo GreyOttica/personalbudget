@@ -5,6 +5,10 @@ import { romeDate } from "@/lib/entry/amount";
 import { isMissingObject } from "@/lib/supabase/missing";
 import { createClient } from "@/lib/supabase/server";
 import { GoalsManager } from "./GoalsManager";
+import { monthOf } from "@/lib/analytics/dashboard";
+import { loadDashboard } from "@/lib/analytics/load";
+import { goalForecasts } from "@/lib/analytics/predict";
+import { formatEuros, formatProbability } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Obiettivi di risparmio" };
 
@@ -17,10 +21,11 @@ export default async function GoalsPage() {
     .order("target_date", { ascending: true, nullsFirst: false })
     .order("created_at");
   const today = romeDate();
-  const goals = ((data ?? []) as Goal[]).map((g) => {
-    const goal = { ...g, target_cents: Number(g.target_cents), saved_cents: Number(g.saved_cents) };
-    return { goal, progress: goalProgress(goal, today) };
-  });
+  const list = ((data ?? []) as Goal[]).map((g) => ({ ...g, target_cents: Number(g.target_cents), saved_cents: Number(g.saved_cents) }));
+  // Previsione del mese: quanto risparmi di solito (per l'arrivo previsto) e se il mese copre le quote.
+  const { prediction } = list.length && !error ? await loadDashboard(monthOf(today)) : { prediction: null };
+  const forecasts = new Map(goalForecasts(list, today, prediction?.usualSavings ?? null, prediction?.savings.p50 ?? null).map((f) => [f.id, f]));
+  const goals = list.map((goal) => ({ goal, progress: goalProgress(goal, today), forecast: forecasts.get(goal.id) }));
   return (
     <main className="page">
       <PageHeader title="Obiettivi di risparmio" subtitle="Una cifra da mettere da parte entro una data: ti dico quanto serve al mese." />
@@ -47,7 +52,28 @@ export default async function GoalsPage() {
           <p className="alert">Non riesco a leggere gli obiettivi: {error.message}</p>
         )
       ) : (
-        <GoalsManager goals={goals} today={today} />
+        <>
+          {prediction && prediction.goalsNeed > 0 && (
+            <section className="card card-padded goals-month">
+              <div className="cost-row">
+                <span>Questo mese gli obiettivi chiedono</span>
+                <strong>{formatEuros(prediction.goalsNeed)}</strong>
+              </div>
+              <p className="small">
+                Risparmio previsto {formatEuros(prediction.savings.p50)} (tra {formatEuros(prediction.savings.p10)} e{" "}
+                {formatEuros(prediction.savings.p90)}): probabilità di coprire le quote{" "}
+                <strong className={prediction.probGoals !== null && prediction.probGoals < 0.5 ? "check-diff" : "good-text"}>
+                  {formatProbability(prediction.probGoals ?? 0)}
+                </strong>
+                .
+              </p>
+              {prediction.targetSource === "goals" && (
+                <p className="muted small">Le quote superano il tuo obiettivo di risparmio: la quota di spesa giornaliera in Home parte da queste.</p>
+              )}
+            </section>
+          )}
+          <GoalsManager goals={goals} today={today} />
+        </>
       )}
     </main>
   );

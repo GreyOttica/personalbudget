@@ -3281,3 +3281,19 @@ input[aria-invalid="true"] {
   background: var(--accent-fill);
   color: var(--accent-text);
 }
+.goal-eta {
+  margin: 4px 0 0;
+}
+.goals-month {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.goals-month p {
+  margin: 0;
+}
+.goals-line {
+  display: block;
+  margin-top: 4px;
+  text-decoration: none;
+}

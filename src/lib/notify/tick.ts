@@ -1,6 +1,7 @@
 import "server-only";
 import { budgetSignals, signalText } from "@/lib/analytics/alerts";
 import { monthOf } from "@/lib/analytics/dashboard";
+import { formatEuros, formatProbability } from "@/lib/format";
 import { predictionFor } from "@/lib/ai/facts";
 import { loadAll } from "@/lib/analytics/loadAll";
 import { runAnalysis } from "@/lib/ai/analyze";
@@ -88,6 +89,17 @@ export async function runTick(at = new Date()) {
         await claim(admin, `warning:${sig.categoryId}:${month}`, "budget_warning");
         await claim(admin, `projection:${sig.categoryId}:${month}`, "budget_projection");
       } else if (sig.level === "warning") await claim(admin, `projection:${sig.categoryId}:${month}`, "budget_projection");
+    }
+  }
+
+  // 1b. Obiettivi a rischio: dal giorno 10, una volta al mese, se coprire le quote è improbabile.
+  if (alertsAllowed(t) && settings.projections && t.day >= 10) {
+    const p = predictionFor(await data(), month).prediction;
+    if (p && p.goalsNeed > 0 && p.probGoals !== null && p.probGoals < 0.4 && (await claim(admin, `goals_risk:${month}`, "goals_risk"))) {
+      const title = "🏁 Obiettivi a rischio questo mese";
+      const body = `Per gli obiettivi servono ${formatEuros(p.goalsNeed)}: a questo ritmo ne metti da parte circa ${formatEuros(Math.max(0, p.savings.p50))} (probabilità di farcela ${formatProbability(p.probGoals)}).`;
+      await record(admin, `goals_risk:${month}`, title, body, await sendPush(admin, { title, body, url: "/obiettivi", tag: "goals" }));
+      done.push(`goals_risk:${month}`);
     }
   }
 

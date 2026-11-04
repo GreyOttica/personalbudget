@@ -140,6 +140,11 @@ function Hero({ d, monthName, p, accuracy }: { d: Dashboard; monthName: string; 
                 {p.usualSavings !== null && ` · di solito ${formatEuros(p.usualSavings)}`}
                 {p.probAboveUsual !== null && ` · probabilità di fare meglio del solito: ${formatProbability(p.probAboveUsual)}`}
               </span>
+              {p.goalsNeed > 0 && p.probGoals !== null && (
+                <Link href="/obiettivi" className={`small goals-line ${p.probGoals < 0.5 ? "check-diff" : "good-text"}`}>
+                  🏁 Obiettivi: servono {formatEuros(p.goalsNeed)} questo mese · probabilità di farcela {formatProbability(p.probGoals)} ›
+                </Link>
+              )}
             </div>
           )}
           <details className="muted small hero-note">

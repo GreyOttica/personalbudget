@@ -5,9 +5,12 @@ import { useState, useTransition } from "react";
 import { centsToInput, parseAmount } from "@/lib/entry/amount";
 import type { Goal, goalProgress } from "@/lib/analytics/insights";
 import { formatEuros, formatPercent } from "@/lib/format";
+import type { GoalForecast } from "@/lib/analytics/predict";
 import { addToGoal, archiveGoal, saveGoal, type GoalResult } from "./actions";
 
-type Item = { goal: Goal; progress: ReturnType<typeof goalProgress> };
+type Item = { goal: Goal; progress: ReturnType<typeof goalProgress>; forecast?: GoalForecast };
+const fmtMonth = new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric", timeZone: "UTC" });
+const monthName = (m: string) => fmtMonth.format(new Date(`${m}-01T00:00:00Z`));
 const EMOJIS = ["🎯", "✈️", "🏖️", "🎁", "🚗", "🏠", "💻", "🎓", "💍", "🛟"];
 const fmtDate = new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 
@@ -30,7 +33,7 @@ export function GoalsManager({ goals, today }: { goals: Item[]; today: string })
   return (
     <>
       {error && <p className="alert">{error}</p>}
-      {goals.map(({ goal, progress }) =>
+      {goals.map(({ goal, progress, forecast }) =>
         editing !== "new" && editing?.id === goal.id ? (
           <GoalForm key={goal.id} goal={goal} today={today} pending={pending} onCancel={() => setEditing(null)} onSave={(g) => run(() => saveGoal({ id: goal.id, ...g }), () => setEditing(null))} />
         ) : (
@@ -60,6 +63,13 @@ export function GoalsManager({ goals, today }: { goals: Item[]; today: string })
                     ? `Metti da parte ${formatEuros(progress.perMonth)} al mese per ${progress.monthsLeft} ${progress.monthsLeft === 1 ? "mese" : "mesi"}.`
                     : `Mancano ${formatEuros(progress.remaining)}.`}
             </p>
+            {!progress.done && forecast && (
+              <p className={`small goal-eta ${forecast.onTime === false ? "check-diff" : forecast.onTime ? "good-text" : "muted"}`}>
+                {forecast.eta
+                  ? `Al tuo ritmo di risparmio ci arrivi a ${monthName(forecast.eta)}${forecast.onTime === true ? ": in tempo ✓" : forecast.onTime === false ? ": in ritardo rispetto alla scadenza" : ""}.`
+                  : "Al ritmo attuale di risparmio non si vede ancora quando ci arrivi."}
+              </p>
+            )}
             <Contribute disabled={pending} onAdd={(cents) => run(() => addToGoal(goal.id, cents))} />
             <div className="goal-actions">
               <button type="button" className="link-button small" onClick={() => setEditing(goal)}>

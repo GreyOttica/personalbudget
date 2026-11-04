@@ -3,7 +3,7 @@
 // questi oggetti, e l'impatto dei consigli viene dalle "leve" calcolate qui.
 // Funzioni pure, testate in scripts/test-analytics.ts.
 import { budgetSignals } from "../analytics/alerts.ts";
-import { applyPrediction, ewma, predictMonth, type Prediction } from "../analytics/predict.ts";
+import { applyPrediction, ewma, goalForecasts, monthlySavings, predictMonth, type Prediction } from "../analytics/predict.ts";
 import {
   addDays,
   addMonths,
@@ -70,7 +70,7 @@ export function predictionFor(input: FactsInput, month: string): { dashboard: Da
   const base = baseDashboard(input, month);
   const prediction =
     month === monthOf(input.today)
-      ? predictMonth({ txns: analytic(input.txns), categories: input.categories, dashboard: base, today: input.today, savingsTarget: input.savingsTarget })
+      ? predictMonth({ txns: analytic(input.txns), categories: input.categories, dashboard: base, today: input.today, savingsTarget: input.savingsTarget, goals: input.goals })
       : null;
   const out = { dashboard: applyPrediction(base, prediction), prediction };
   byMonth.set(month, out);
@@ -140,7 +140,9 @@ export function monthFacts(input: FactsInput, month: string) {
           risparmio_di_solito: p.usualSavings === null ? undefined : eur(p.usualSavings),
           prob_risparmiare_piu_del_solito_pct: p.probAboveUsual === null ? undefined : Math.round(p.probAboveUsual * 100),
           obiettivo_risparmio: eur(p.savingsTarget),
-          obiettivo_scelto_da: p.targetSource === "custom" ? "utente" : "media recente",
+          obiettivo_scelto_da: p.targetSource === "custom" ? "utente" : p.targetSource === "goals" ? "quote degli obiettivi" : "media recente",
+          quote_obiettivi_mese: p.goalsNeed ? eur(p.goalsNeed) : undefined,
+          prob_coprire_quote_obiettivi_pct: p.probGoals === null ? undefined : Math.round(p.probGoals * 100),
           quota_spesa_variabile_oggi: p.quota ? eur(p.quota.today) : undefined,
           rispetto_al_ritmo_previsto: p.quota ? eur(p.quota.vsPace) : undefined, // positivo = speso meno del previsto
           giorni_di_fila_sotto_quota: p.quota?.streak,
@@ -277,9 +279,22 @@ function smallFacts(input: FactsInput, month: string) {
 }
 
 function goalsFacts(input: FactsInput) {
+  // Arrivo previsto mettendo da parte ogni mese il risparmio di solito, prima gli obiettivi che scadono prima.
+  const usual = ewma(monthlySavings(analytic(input.txns), monthOf(input.today)), 3);
+  const eta = new Map(goalForecasts(input.goals, input.today, usual).map((f) => [f.id, f]));
   return input.goals.map((g) => {
     const p = goalProgress(g, input.today);
-    return { nome: g.name, obiettivo: eur(g.target_cents), messi_da_parte: eur(g.saved_cents), mancano: eur(p.remaining), entro: g.target_date ?? undefined, al_mese: p.perMonth === null ? undefined : eur(p.perMonth) };
+    const f = eta.get(g.id);
+    return {
+      nome: g.name,
+      obiettivo: eur(g.target_cents),
+      messi_da_parte: eur(g.saved_cents),
+      mancano: eur(p.remaining),
+      entro: g.target_date ?? undefined,
+      al_mese: p.perMonth === null ? undefined : eur(p.perMonth),
+      arrivo_previsto_mese: f?.eta ?? undefined,
+      in_tempo: f?.onTime ?? undefined,
+    };
   });
 }
 

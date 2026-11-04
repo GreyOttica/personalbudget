@@ -10,7 +10,8 @@
 //   spendi di solito in ciascun giorno della settimana.
 // - Precisione: la stessa simulazione rifatta a metà dei mesi passati e confrontata con com'è andata.
 
-import { addDays, daysIn, monthOf, weekdayOf, type AnalyticsCategory, type Dashboard } from "./dashboard.ts";
+import { addDays, addMonths, daysIn, monthOf, weekdayOf, type AnalyticsCategory, type Dashboard } from "./dashboard.ts";
+import { goalProgress, type Goal } from "./insights.ts";
 export { weightedQuantile } from "./dashboard.ts";
 
 export type PredictTxn = { occurred_on: string; type: string; amount_cents: number; category_id: string };
@@ -45,7 +46,12 @@ export type Prediction = {
   /** risparmio "di solito": media dei mesi completi che pesa di più i recenti */
   usualSavings: number | null;
   savingsTarget: number;
-  targetSource: "custom" | "usual" | "none";
+  /** "goals": le quote mensili degli obiettivi superano l'obiettivo di risparmio, e la quota giornaliera parte da quelle */
+  targetSource: "custom" | "usual" | "goals" | "none";
+  /** quanto chiedono questo mese gli obiettivi con una scadenza */
+  goalsNeed: number;
+  /** probabilità che il risparmio del mese copra le quote degli obiettivi */
+  probGoals: number | null;
   /** probabilità di risparmiare almeno quanto di solito */
   probAboveUsual: number | null;
   categories: Map<string, Band & { probOver: number | null }>;
@@ -199,6 +205,8 @@ export type PredictInput = {
   today: string;
   /** obiettivo di risparmio mensile scelto dall'utente (centesimi), altrimenti "come di solito" */
   savingsTarget?: number | null;
+  /** obiettivi attivi: le loro quote mensili entrano nell'obiettivo di risparmio */
+  goals?: Goal[];
   sims?: number;
 };
 
@@ -242,7 +250,9 @@ export function predictMonth(input: PredictInput): Prediction | null {
   const history = monthlySavings(input.txns, d.month);
   const usual = ewma(history, SAVINGS_HALF_LIFE_MONTHS);
   const usualSavings = usual === null ? null : Math.round(usual);
-  const target = input.savingsTarget ?? usualSavings;
+  const goalsNeed = goalsMonthlyNeed(input.goals ?? [], input.today);
+  const base = input.savingsTarget ?? usualSavings;
+  const target = goalsNeed > 0 && (base === null || goalsNeed > base) ? goalsNeed : base;
 
   return {
     month: d.month,
@@ -254,7 +264,9 @@ export function predictMonth(input: PredictInput): Prediction | null {
     savings: band(savingsValues),
     usualSavings,
     savingsTarget: Math.max(0, target ?? 0),
-    targetSource: input.savingsTarget != null ? "custom" : usualSavings !== null ? "usual" : "none",
+    targetSource: target === goalsNeed && goalsNeed > 0 && target !== base ? "goals" : input.savingsTarget != null ? "custom" : usualSavings !== null ? "usual" : "none",
+    goalsNeed,
+    probGoals: goalsNeed > 0 ? savingsValues.filter((x) => x >= goalsNeed).length / sims : null,
     probAboveUsual: usualSavings === null ? null : savingsValues.filter((s) => s >= usualSavings).length / sims,
     categories,
     quota: target === null || target === undefined ? null : dailyQuota(input, pool, variableSpent, income - fixed - Math.max(0, target)),
@@ -293,6 +305,51 @@ function dailyQuota(input: PredictInput, pool: Pool, variableSpent: number, allo
     else break;
   }
   return { today, spentToday, left: Math.round(left), weekdayFactor: Math.round(f[weekdayOf(input.today)] * 100) / 100, vsPace, streak };
+}
+
+// --- obiettivi -----------------------------------------------------------------------
+
+/** Somma delle quote mensili degli obiettivi con scadenza, non ancora raggiunti. */
+export function goalsMonthlyNeed(goals: Goal[], today: string): number {
+  return goals.reduce((s, g) => {
+    const p = goalProgress(g, today);
+    return s + (!p.done && p.perMonth ? p.perMonth : 0);
+  }, 0);
+}
+
+export type GoalForecast = { id: string; perMonth: number | null; eta: string | null; onTime: boolean | null };
+
+/**
+ * Quando arrivi a ciascun obiettivo se ogni mese metti da parte quanto risparmi di solito (il mese in corso:
+ * il risparmio previsto), riempiendo
+ * prima quelli che scadono prima. `eta` = mese (AAAA-MM) in cui l'obiettivo è completo.
+ */
+export function goalForecasts(goals: Goal[], today: string, monthlySaving: number | null, thisMonthSaving?: number | null): GoalForecast[] {
+  const active = goals
+    .map((g) => ({ g, p: goalProgress(g, today) }))
+    .sort((a, b) => (a.g.target_date ?? "9999").localeCompare(b.g.target_date ?? "9999"));
+  const left = new Map(active.map(({ g, p }) => [g.id, p.remaining]));
+  const eta = new Map<string, string | null>(active.map(({ g, p }) => [g.id, p.done ? monthOf(today) : null]));
+  if (monthlySaving && monthlySaving > 0) {
+    let month = monthOf(today);
+    for (let i = 0; i < 120 && [...left.values()].some((x) => x > 0); i++) {
+      // Il mese in corso con il risparmio previsto, i successivi con quello di solito.
+      let budget = i === 0 && thisMonthSaving != null ? Math.max(0, thisMonthSaving) : monthlySaving;
+      for (const { g } of active) {
+        const need = left.get(g.id)!;
+        if (need <= 0 || budget <= 0) continue;
+        const put = Math.min(need, budget);
+        budget -= put;
+        left.set(g.id, need - put);
+        if (need - put <= 0) eta.set(g.id, month);
+      }
+      month = addMonths(month, 1);
+    }
+  }
+  return active.map(({ g, p }) => {
+    const e = eta.get(g.id) ?? null;
+    return { id: g.id, perMonth: p.perMonth, eta: e, onTime: g.target_date && e ? e <= g.target_date.slice(0, 7) : g.target_date ? false : null };
+  });
 }
 
 // --- precisione: la stessa previsione rifatta sui mesi passati ----------------------
