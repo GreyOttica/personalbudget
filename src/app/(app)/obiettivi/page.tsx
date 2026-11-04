@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/PageHeader";
 import { goalProgress, type Goal } from "@/lib/analytics/insights";
 import { romeDate } from "@/lib/entry/amount";
+import { isMissingObject } from "@/lib/supabase/missing";
 import { createClient } from "@/lib/supabase/server";
 import { GoalsManager } from "./GoalsManager";
 
@@ -24,10 +25,27 @@ export default async function GoalsPage() {
     <main className="page">
       <PageHeader title="Obiettivi di risparmio" subtitle="Una cifra da mettere da parte entro una data: ti dico quanto serve al mese." />
       {error ? (
-        <p className="alert">
-          Non riesco a leggere gli obiettivi: {error.message}. Se è la prima volta, esegui su Supabase la migrazione{" "}
-          <code>20261031000004_goals.sql</code>.
-        </p>
+        isMissingObject(error) ? (
+          <section className="card card-padded">
+            <p>
+              <strong>Manca la tabella degli obiettivi su Supabase.</strong> Esegui una volta la migrazione{" "}
+              <code>20261031000004_goals.sql</code>:
+            </p>
+            <ol className="small notif-steps">
+              <li>
+                Apri il file su{" "}
+                <a href="https://github.com/GreyOttica/personalbudget/blob/main/supabase/migrations/20261031000004_goals.sql" target="_blank" rel="noreferrer">
+                  GitHub
+                </a>{" "}
+                e copia tutto il testo (icona «Copy raw file»).
+              </li>
+              <li>Su Supabase: SQL Editor → New query → incolla → Run.</li>
+              <li>Torna qui e ricarica la pagina.</li>
+            </ol>
+          </section>
+        ) : (
+          <p className="alert">Non riesco a leggere gli obiettivi: {error.message}</p>
+        )
       ) : (
         <GoalsManager goals={goals} today={today} />
       )}
