@@ -624,3 +624,37 @@ test("positiveMessage: niente complimenti se non registri da più di 2 giorni", 
   assert.equal(positiveMessage(base as never, "2026-11-12", 12, null), null);
   assert.ok(positiveMessage(base as never, "2026-11-12", 12, "2026-11-11"));
 });
+
+// --- Suggerimenti per l'inserimento ----------------------------------------------------
+import { favorites, habits, search, typicalAmounts } from "../src/lib/entry/suggest.ts";
+
+test("suggerimenti: abitudini, preferiti, ricerca, importi tipici", () => {
+  const T = (d: string, cat: string, sub: string | null, cents: number, note: string | null) => ({ occurred_on: d, type: "expense", amount_cents: cents, category_id: cat, subcategory_id: sub, note });
+  const txns = [
+    T("2026-11-01", "bar", "caffe", 150, "Caffè"),
+    T("2026-11-02", "bar", "caffe", 150, "caffe"),
+    T("2026-11-03", "bar", "caffe", 180, "Caffè"),
+    T("2026-11-04", "bar", "caffe", 150, "Caffè"),
+    T("2026-10-20", "sup", null, 3250, "Esselunga"),
+    T("2026-10-27", "sup", null, 4100, "Esselunga"),
+    T("2026-11-03", "sup", null, 2900, "Esselunga Viale"),
+    T("2026-11-01", "aff", null, 90000, null),
+    T("2026-11-01", "aff", null, 90000, null),
+    T("2026-10-01", "aff", null, 90000, null),
+    T("2026-04-01", "bar", "caffe", 150, "Caffè"), // fuori finestra (180 giorni)
+  ];
+  const h = habits(txns, "2026-11-04");
+  const caffe = h.find((x) => x.subcategory_id === "caffe")!;
+  assert.equal(caffe.count, 4, "Caffè e caffe sono la stessa abitudine; aprile è fuori finestra");
+  assert.equal(caffe.amount_cents, 150, "importo più frequente");
+  assert.equal(caffe.note, "Caffè");
+  const fav = favorites(txns, "2026-11-04", new Set(["aff"]));
+  assert.deepEqual(fav.map((f) => f.category_id), ["bar"], "niente affitto, niente gruppi con meno di 3 volte");
+  const cats = [{ id: "bar", name: "Cibo fuori / Bevute" }, { id: "sup", name: "Supermercato" }, { id: "aff", name: "Affitto" }];
+  const subs = [{ id: "caffe", name: "Caffè" }];
+  assert.deepEqual(search("esse", txns, "2026-11-04", cats, subs).map((s) => s.note), ["Esselunga", "Esselunga Viale"]);
+  assert.equal(search("caf", txns, "2026-11-04", cats, subs)[0].subcategory_id, "caffe");
+  assert.equal(search("bevu", txns, "2026-11-04", cats, subs)[0].category_id, "bar", "anche dal nome della categoria");
+  assert.deepEqual(search("x", txns, "2026-11-04", cats, subs), [], "almeno 2 lettere");
+  assert.deepEqual(typicalAmounts(txns, "2026-11-04", "bar", "caffe"), [150, 180]);
+});

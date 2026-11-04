@@ -3,11 +3,12 @@
 import { PageLink } from "@/components/PageLink";
 import { useMemo, useRef, useState } from "react";
 import { SyncBadge } from "@/components/SyncBadge";
-import { formatDay, parseAmount, relativeDay, romeDate } from "@/lib/entry/amount";
+import { centsToInput, formatDay, parseAmount, relativeDay, romeDate } from "@/lib/entry/amount";
 import { defaultDirection, txnType, type Category, type Direction, type Reference, type TxnDraft } from "@/lib/entry/types";
 import { formatCents } from "@/lib/format";
 import { QuickRepeat } from "@/components/QuickRepeat";
-import { useReference, useSyncState } from "@/lib/offline/hooks";
+import { useReference, useSyncState, useTransactions } from "@/lib/offline/hooks";
+import { search, typicalAmounts, type Habit } from "@/lib/entry/suggest";
 import { flush, saveTxn } from "@/lib/offline/sync";
 
 // Stesso ordine del Google Form: data, categoria, sottocategoria, importo, note, conto (Da/A), tag.
@@ -38,6 +39,7 @@ const emptyDraft = (): Draft => ({
 
 export function NewEntry() {
   const reference = useReference();
+  const txns = useTransactions();
   const [step, setStep] = useState<Step>("date");
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [saved, setSaved] = useState<TxnDraft | null>(null);
@@ -106,6 +108,22 @@ export function NewEntry() {
       {step === "category" && (
         <CategoryStep
           categories={reference.categories}
+          subcategories={reference.subcategories}
+          txns={txns ?? []}
+          onSuggestion={(h) => {
+            const c = reference.categories.find((x) => x.id === h.category_id);
+            const sub = reference.subcategories.find((x) => x.id === h.subcategory_id);
+            if (!c) return;
+            // Dal suggerimento: categoria, sottocategoria, nota e importo tipico; si conferma l'importo.
+            update({
+              categoryId: c.id,
+              subcategory: sub ? { id: sub.id, name: sub.name, isNew: false } : null,
+              note: h.note ?? "",
+              amountText: centsToInput(h.amount_cents).replace(/,00$/, ""),
+              direction: defaultDirection(c),
+            });
+            go("amount");
+          }}
           selected={draft.categoryId}
           onPick={(c) => {
             if (!reference.categories.some((x) => x.id === c.id)) setCreated(c);
@@ -127,7 +145,12 @@ export function NewEntry() {
         />
       )}
       {step === "amount" && (
-        <AmountStep value={draft.amountText} onChange={(amountText) => update({ amountText })} onNext={next} />
+        <AmountStep
+          value={draft.amountText}
+          onChange={(amountText) => update({ amountText })}
+          onNext={next}
+          suggestions={category ? typicalAmounts(txns ?? [], draft.date, category.id, draft.subcategory?.isNew ? null : (draft.subcategory?.id ?? null)) : []}
+        />
       )}
       {step === "note" && <NoteStep value={draft.note} onChange={(note) => update({ note })} onNext={next} />}
       {step === "account" && category && (
@@ -228,17 +251,61 @@ const EMOJI_SUGGESTIONS = ["🐶", "👶", "🎮", "📚", "🍷", "🏋️", "�
 
 function CategoryStep({
   categories,
+  subcategories,
+  txns,
   selected,
   onPick,
+  onSuggestion,
 }: {
   categories: Category[];
+  subcategories: { id: string; name: string; category_id: string }[];
+  txns: { occurred_on: string; type: string; amount_cents: number; category_id: string; subcategory_id: string | null; note?: string | null }[];
   selected: string | null;
   onPick: (c: Category) => void;
+  onSuggestion: (h: Habit) => void;
 }) {
   const [adding, setAdding] = useState(false);
+  const [query, setQuery] = useState("");
+  const found = useMemo(() => search(query, txns, romeDate(), categories, subcategories), [query, txns, categories, subcategories]);
   return (
     <section className="stack">
       <h1>Categoria</h1>
+      <div className="entry-search">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Cerca: esselunga, caffè, benzina…"
+          aria-label="Cerca tra le spese che fai di solito"
+          enterKeyHint="search"
+          autoComplete="off"
+        />
+        {query.trim().length >= 2 && (
+          <ul className="card menu suggestions" aria-label="Suggerimenti">
+            {found.length === 0 && <li className="muted small suggestion-empty">Niente di simile negli ultimi 6 mesi: scegli la categoria qui sotto.</li>}
+            {found.map((h) => {
+              const c = categories.find((x) => x.id === h.category_id);
+              const sub = subcategories.find((x) => x.id === h.subcategory_id);
+              return (
+                <li key={h.key}>
+                  <button type="button" className="menu-row suggestion" onClick={() => onSuggestion(h)}>
+                    <span className="menu-icon" aria-hidden>
+                      {c?.emoji ?? "•"}
+                    </span>
+                    <span className="menu-main">
+                      <strong>{h.note ?? sub?.name ?? c?.name}</strong>
+                      <span className="muted small">
+                        {[c?.name, sub?.name].filter(Boolean).join(" › ")} · {h.count} {h.count === 1 ? "volta" : "volte"}
+                      </span>
+                    </span>
+                    <span className="quick-amount">{formatCents(h.amount_cents)}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
       <div className="category-grid">
         {categories.map((c) => (
           <button key={c.id} type="button" className={`category ${selected === c.id ? "selected" : ""}`} onClick={() => onPick(c)}>
@@ -406,7 +473,17 @@ function SubcategoryStep({
   );
 }
 
-function AmountStep({ value, onChange, onNext }: { value: string; onChange: (v: string) => void; onNext: () => void }) {
+function AmountStep({
+  value,
+  onChange,
+  onNext,
+  suggestions,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onNext: () => void;
+  suggestions: number[];
+}) {
   const cents = parseAmount(value);
   const invalid = value.trim() !== "" && cents === null;
   return (
@@ -431,6 +508,15 @@ function AmountStep({ value, onChange, onNext }: { value: string; onChange: (v: 
         />
         <span aria-hidden>€</span>
       </div>
+      {suggestions.length > 0 && (
+        <div className="amount-chips" aria-label="Importi che usi di solito">
+          {suggestions.map((c) => (
+            <button key={c} type="button" className={`chip ${parseAmount(value) === c ? "chip-on" : ""}`} onClick={() => onChange(centsToInput(c).replace(/,00$/, ""))}>
+              {formatCents(c)}
+            </button>
+          ))}
+        </div>
+      )}
       {invalid && <p className="alert">Scrivi un importo valido, per esempio 2,80.</p>}
       <button type="submit" className="button" disabled={cents === null}>
         Avanti

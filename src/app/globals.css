@@ -3232,3 +3232,52 @@ input[aria-invalid="true"] {
 .hero-note p {
   margin: 6px 0 0;
 }
+
+/* Inserimento veloce */
+.entry-search {
+  display: grid;
+  gap: 8px;
+}
+.entry-search input {
+  font: inherit;
+  font-size: 16px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--fill);
+  color: inherit;
+}
+.suggestions {
+  margin: 0;
+}
+.suggestion {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  border: 0;
+  background: none;
+  color: inherit;
+}
+.suggestion-empty {
+  padding: 12px 14px;
+  list-style: none;
+}
+.amount-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip {
+  font: inherit;
+  font-weight: 600;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--fill);
+  color: var(--accent);
+}
+.chip-on {
+  background: var(--accent-fill);
+  color: var(--accent-text);
+}
