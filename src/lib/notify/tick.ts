@@ -161,7 +161,14 @@ export async function runTick(at = new Date()) {
         const res = await runAnalysis(job.kind, admin as never, t.date);
         if (!res.ok) throw new Error(res.error);
         const label = job.kind === "daily" ? "Analisi della sera" : job.kind === "weekly" ? "Report della settimana" : "Report del mese";
-        const sent = await sendPush(admin, { title: label, body: res.headline, url: "/analisi", tag: job.kind });
+        // Il 1° del mese la notifica apre la chiusura guidata del mese appena finito.
+        const monthly = job.kind === "monthly";
+        const sent = await sendPush(admin, {
+          title: label,
+          body: monthly ? `${res.headline} Tocca per chiudere il mese: saldo, com'è andata, budget nuovi.` : res.headline,
+          url: monthly ? "/chiusura" : "/analisi",
+          tag: job.kind,
+        });
         await record(admin, job.key, label, res.headline, sent);
       }
       done.push(job.key);

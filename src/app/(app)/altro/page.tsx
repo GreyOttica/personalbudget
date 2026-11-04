@@ -23,6 +23,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
   {
     title: "Gestione",
     items: [
+      { href: "/chiusura", icon: "🗓️", title: "Chiusura del mese", hint: "Saldo con la banca, com'è andata, budget del mese nuovo" },
       { href: "/budget", icon: "🎯", title: "Budget e obiettivo di risparmio", hint: "Tetti di spesa per categoria e quanto mettere da parte al mese" },
       { href: "/ricorrenti", icon: "🔁", title: "Ricorrenti e abbonamenti", hint: "Affitto, investimento, SIM: addebiti automatici" },
       { href: "/obiettivi", icon: "🏁", title: "Obiettivi", hint: "Somme da mettere da parte entro una data" },

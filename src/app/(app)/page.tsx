@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Meter, StatusLabel } from "@/components/Meter";
 import { MonthSwitch } from "@/components/MonthSwitch";
 import { SyncBadge } from "@/components/SyncBadge";
-import { monthOf, type Dashboard } from "@/lib/analytics/dashboard";
+import { addMonths, monthOf, type Dashboard } from "@/lib/analytics/dashboard";
 import { loadDashboard, parseMonth } from "@/lib/analytics/load";
 import { romeDate } from "@/lib/entry/amount";
 import { formatEuros, formatMonthName, formatPercent, formatProbability } from "@/lib/format";
@@ -27,6 +27,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
   const empty = d.trend.length === 0;
   const signals = budgetSignals(d);
   const latestAi = month === current ? await latestAnalysis() : null;
+  // Nei primi 10 giorni del mese, se il mese scorso non è ancora chiuso: invito alla chiusura guidata.
+  const prevMonth = addMonths(current, -1);
+  const toClose = month === current && Number(romeDate().slice(8, 10)) <= 10 && !(await isClosed(prevMonth)) ? prevMonth : null;
 
   return (
     <main className="page dash">
@@ -48,6 +51,20 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
           <Hero d={d} monthName={monthName} p={prediction} accuracy={accuracy} />
           <Tiles d={d} />
           {signals.length > 0 && <Alerts signals={signals} />}
+          {toClose && (
+            <Link href="/chiusura" className="card menu-row closing-card">
+              <span className="menu-icon" aria-hidden>
+                🗓️
+              </span>
+              <span className="menu-main">
+                <strong>Chiudi {formatMonthName(toClose)}</strong>
+                <span className="muted small">Un minuto: saldo con la banca, com&apos;è andata, budget di {monthName}</span>
+              </span>
+              <span className="chevron" aria-hidden>
+                ›
+              </span>
+            </Link>
+          )}
           {latestAi && <AiCard a={latestAi} />}
           <section className="section">
             <div className="section-head">
@@ -237,6 +254,13 @@ function Alerts({ signals }: { signals: BudgetSignal[] }) {
       )}
     </section>
   );
+}
+
+/** Vero se il mese è stato chiuso (o se la migrazione 0010 manca: niente invito finché non c'è la tabella). */
+async function isClosed(month: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("month_closures").select("month").eq("month", month).maybeSingle();
+  return !!data || !!error;
 }
 
 /** Ultima analisi AI (se la migrazione 0006 manca, la card semplicemente non compare). */
