@@ -3344,3 +3344,37 @@ input[aria-invalid="true"] {
   color: inherit;
   margin-bottom: 14px;
 }
+
+/* Budget per viaggi ed eventi */
+.tag-budget {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.tag-budget p {
+  margin: 0;
+}
+.tag-budget-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+.tag-budget-new {
+  width: 100%;
+  margin: 4px 0 14px;
+}
+.tag-budget-form {
+  display: grid;
+  gap: 10px;
+}
+.tag-budget-form p {
+  margin: 0;
+}
+.tag-budget-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.warn-text {
+  color: var(--warning-text, #b25000);
+}

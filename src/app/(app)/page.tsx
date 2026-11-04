@@ -13,6 +13,8 @@ import { categoryColorSlots, composition } from "@/lib/analytics/insights";
 import { KIND_LABEL, periodLabel, type AnalysisRow } from "@/components/AnalysisCard";
 import { createClient } from "@/lib/supabase/server";
 import { budgetSignals, type BudgetSignal } from "@/lib/analytics/alerts";
+import { tagBudgetStatus } from "@/lib/analytics/tags";
+import { TagBudgetCard } from "@/components/TagBudgetCard";
 import type { Accuracy, Prediction } from "@/lib/analytics/predict";
 
 export const metadata: Metadata = { title: "Home" };
@@ -20,9 +22,10 @@ export const metadata: Metadata = { title: "Home" };
 export default async function Home({ searchParams }: { searchParams: Promise<{ m?: string }> }) {
   const { m } = await searchParams;
   const month = parseMonth(m);
-  const { dashboard: d, categories, txns, prediction, accuracy } = await loadDashboard(month);
+  const { dashboard: d, categories, txns, prediction, accuracy, tagBudgets } = await loadDashboard(month);
   const comp = composition(txns, categories, month, categoryColorSlots(txns, month));
   const current = monthOf(romeDate());
+  const trips = month === current ? tagBudgets.map((b) => tagBudgetStatus(b, txns, romeDate())).filter((t) => t.active) : [];
   const monthName = formatMonthName(month);
   const empty = d.trend.length === 0;
   const signals = budgetSignals(d);
@@ -65,6 +68,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
               </span>
             </Link>
           )}
+          {trips.map((t) => (
+            <Link key={t.tag} href={`/viaggi?tag=${encodeURIComponent(t.tag)}`} className="tag-budget-link">
+              <TagBudgetCard s={t} title />
+            </Link>
+          ))}
           {latestAi && <AiCard a={latestAi} />}
           <section className="section">
             <div className="section-head">

@@ -4,6 +4,10 @@ import { PageHeader } from "@/components/PageHeader";
 import { loadAll } from "@/lib/analytics/loadAll";
 import { tagSummaries } from "@/lib/analytics/insights";
 import { formatEuros } from "@/lib/format";
+import { tagBudgetStatus } from "@/lib/analytics/tags";
+import { TagBudgetCard } from "@/components/TagBudgetCard";
+import { romeDate } from "@/lib/entry/amount";
+import { EditTagBudget, NewTagBudget } from "./TagBudgetEditor";
 
 export const metadata: Metadata = { title: "Viaggi ed eventi" };
 
@@ -12,9 +16,25 @@ const fmtDay = (d: string) => day.format(new Date(`${d}T00:00:00Z`));
 
 export default async function TagsPage({ searchParams }: { searchParams: Promise<{ tag?: string }> }) {
   const { tag } = await searchParams;
-  const { txns, categories } = await loadAll();
+  const { txns, categories, tagBudgets } = await loadAll();
+  const today = romeDate();
   const tags = tagSummaries(txns, categories);
+  const budgets = new Map(tagBudgets.map((b) => [b.tag, b]));
+  const status = new Map(tagBudgets.map((b) => [b.tag, tagBudgetStatus(b, txns, today)]));
   const open = tags.find((t) => t.tag === tag);
+  // Budget per un viaggio ancora senza spese: pagina con solo il budget.
+  const planned = !open && tag && budgets.has(tag) ? tag : null;
+
+  if (planned) {
+    const st = status.get(planned)!;
+    return (
+      <main className="page">
+        <PageHeader title={planned} back="/viaggi" backLabel="Viaggi ed eventi" />
+        <TagBudgetCard s={st} />
+        <EditTagBudget tag={planned} initial={budgets.get(planned)!} />
+      </main>
+    );
+  }
 
   if (open) {
     const max = Math.max(...open.categories.map((c) => c.amount));
@@ -29,6 +49,8 @@ export default async function TagsPage({ searchParams }: { searchParams: Promise
             {open.count} movimenti
           </p>
         </section>
+        {status.has(open.tag) && <TagBudgetCard s={status.get(open.tag)!} />}
+        <EditTagBudget tag={open.tag} initial={budgets.get(open.tag) ?? null} />
         <ul className="card card-padded hbars">
           {open.categories.map((c) => (
             <li key={c.id} className="hbar">
@@ -54,6 +76,18 @@ export default async function TagsPage({ searchParams }: { searchParams: Promise
   return (
     <main className="page">
       <PageHeader title="Viaggi ed eventi" subtitle="Le spese con un tag, raggruppate: quanto è costato ogni viaggio o evento." />
+      {tagBudgets.length > 0 && (
+        <>
+          <h2 className="group-title">Budget</h2>
+          {tagBudgets.map((b) => (
+            <Link key={b.tag} href={`/viaggi?tag=${encodeURIComponent(b.tag)}`} className="tag-budget-link">
+              <TagBudgetCard s={status.get(b.tag)!} title />
+            </Link>
+          ))}
+        </>
+      )}
+      <NewTagBudget tags={tags.map((t) => t.tag)} />
+      {tags.length > 0 && <h2 className="group-title">Tutti i tag</h2>}
       {tags.length === 0 ? (
         <p className="muted">Nessun tag ancora. Aggiungilo all&apos;ultimo passo del nuovo movimento, per esempio &quot;Lisbona - 2026&quot;.</p>
       ) : (
@@ -82,3 +116,4 @@ export default async function TagsPage({ searchParams }: { searchParams: Promise
     </main>
   );
 }
+

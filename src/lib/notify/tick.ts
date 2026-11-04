@@ -1,6 +1,7 @@
 import "server-only";
 import { budgetSignals, signalText } from "@/lib/analytics/alerts";
 import { monthOf } from "@/lib/analytics/dashboard";
+import { tagBudgetStatus } from "@/lib/analytics/tags";
 import { formatEuros, formatProbability } from "@/lib/format";
 import { predictionFor } from "@/lib/ai/facts";
 import { loadAll } from "@/lib/analytics/loadAll";
@@ -66,7 +67,7 @@ export async function runTick(at = new Date()) {
 
   // 1. Avvisi sul budget: 80%, 100% e "al ritmo attuale sforerai".
   const month = monthOf(t.date);
-  let facts: Parameters<typeof predictionFor>[0] | null = null;
+  let facts: (Awaited<ReturnType<typeof loadAll>> & { today: string }) | null = null;
   const data = async () => (facts ??= { ...(await loadAll(admin as never)), today: t.date });
 
   if (alertsAllowed(t) && (settings.budget_alerts || settings.projections)) {
@@ -89,6 +90,25 @@ export async function runTick(at = new Date()) {
         await claim(admin, `warning:${sig.categoryId}:${month}`, "budget_warning");
         await claim(admin, `projection:${sig.categoryId}:${month}`, "budget_projection");
       } else if (sig.level === "warning") await claim(admin, `projection:${sig.categoryId}:${month}`, "budget_projection");
+    }
+  }
+
+  // 1a. Budget dei viaggi ed eventi: oltre l'80% e superato, una volta per tag.
+  if (alertsAllowed(t) && settings.budget_alerts) {
+    const input = await data();
+    for (const b of input.tagBudgets) {
+      const st = tagBudgetStatus(b, input.txns, t.date);
+      if (st.level === "ok" || (!st.active && st.lastSpend !== t.date)) continue;
+      const key = `tag_${st.level}:${st.tag}`;
+      if (st.level === "over") await claim(admin, `tag_warning:${st.tag}`, "tag_warning"); // niente 80% dopo il superato
+      if (!(await claim(admin, key, `tag_${st.level}`))) continue;
+      const title = st.level === "over" ? `🏷️ ${st.tag}: budget superato` : `🏷️ ${st.tag}: oltre l'80% del budget`;
+      const body =
+        st.level === "over"
+          ? `${formatEuros(st.spent)} su ${formatEuros(st.budget)} (+${formatEuros(-st.left)}).`
+          : `${formatEuros(st.spent)} su ${formatEuros(st.budget)}: restano ${formatEuros(st.left)}${st.perDayLeft !== null ? `, ${formatEuros(st.perDayLeft)} al giorno fino alla fine` : ""}.`;
+      await record(admin, key, title, body, await sendPush(admin, { title, body, url: `/viaggi?tag=${encodeURIComponent(st.tag)}`, tag: `trip-${st.tag}` }));
+      done.push(key);
     }
   }
 

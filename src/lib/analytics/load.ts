@@ -42,6 +42,7 @@ export async function loadDashboard(month: string) {
     accuracy,
     savingsTarget: all.savingsTarget,
     goals: all.goals,
+    tagBudgets: all.tagBudgets,
     categories: all.categories,
     subcategories: all.subcategories,
     txns: all.txns,

@@ -687,3 +687,37 @@ test("obiettivi: quote mensili, arrivo previsto in ordine di scadenza, quota gio
   assert.equal(low.targetSource, "goals", "le quote (1.800 €) superano l'obiettivo di 100 €");
   assert.ok(low.probGoals! < 0.05);
 });
+
+// --- Budget per viaggi ed eventi -------------------------------------------------------
+import { tagBudgetStatus } from "../src/lib/analytics/tags.ts";
+
+test("budget per tag: speso, residuo al giorno, viaggio in corso", () => {
+  const txns = [
+    { occurred_on: "2026-11-01", type: "expense", amount_cents: 60000, tag: "Giappone 2026" },
+    { occurred_on: "2026-11-03", type: "expense", amount_cents: 52000, tag: "Giappone 2026" },
+    { occurred_on: "2026-11-03", type: "expense", amount_cents: 9999, tag: "Altro" },
+    { occurred_on: "2026-11-02", type: "income", amount_cents: 5000, tag: "Giappone 2026" },
+  ];
+  const s = tagBudgetStatus({ tag: "Giappone 2026", amount_cents: 150000, ends_on: "2026-11-07" }, txns, "2026-11-04");
+  assert.equal(s.spent, 112000);
+  assert.equal(s.left, 38000);
+  assert.equal(s.daysLeft, 4, "dal 4 al 7 compresi");
+  assert.equal(s.perDayLeft, 9500);
+  assert.equal(s.level, "ok");
+  assert.equal(s.active, true);
+  const over = tagBudgetStatus({ tag: "Giappone 2026", amount_cents: 100000, ends_on: null }, txns, "2026-11-20");
+  assert.equal(over.level, "over");
+  assert.equal(over.active, false, "senza data di fine: in corso solo con spese negli ultimi 7 giorni");
+  assert.equal(over.perDayLeft, null);
+  assert.equal(tagBudgetStatus({ tag: "Natale", amount_cents: 30000, ends_on: "2026-12-26" }, txns, "2026-11-04").active, true, "evento entro 60 giorni");
+});
+
+test("parseAmount: punto delle migliaia all'italiana", async () => {
+  const { parseAmount } = await import("../src/lib/entry/amount.ts");
+  assert.equal(parseAmount("1.500"), 150000);
+  assert.equal(parseAmount("12.345"), 1234500);
+  assert.equal(parseAmount("2.80"), 280, "un punto con 2 decimali resta il decimale");
+  assert.equal(parseAmount("1.234,56"), 123456);
+  assert.equal(parseAmount("1.234.567"), 123456700);
+  assert.equal(parseAmount("2,80"), 280);
+});

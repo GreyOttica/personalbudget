@@ -1,18 +1,20 @@
 // Importi e date in formato italiano.
 
-import { TIME_ZONE } from "@/lib/format";
+import { TIME_ZONE } from "../format.ts";
 
 const MAX_CENTS = 10_000_000_00; // 10 milioni di euro: oltre è sicuramente un errore di battitura
 
 /**
  * "2,80" / "2.80" / "1.234,56" / "1234" → centesimi. null se non è un importo valido e positivo.
- * Con la virgola, i punti sono separatori delle migliaia; senza virgola, un solo punto è il decimale.
+ * Con la virgola, i punti sono separatori delle migliaia; senza virgola, un solo punto è il decimale,
+ * tranne quando lo seguono esattamente 3 cifre ("1.500" = 1500 €, come si scrive in italiano).
  */
 export function parseAmount(input: string): number | null {
   let s = input.replace(/[\s€]/g, "");
   if (!s) return null;
   if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
   else if ((s.match(/\./g) ?? []).length > 1) s = s.replace(/\./g, "");
+  else if (/^\d{1,3}\.\d{3}$/.test(s)) s = s.replace(".", ""); // "1.500" all'italiana = millecinquecento
   if (!/^\d+(\.\d{1,2})?$/.test(s)) return null;
   const cents = Math.round(Number(s) * 100);
   return cents > 0 && cents <= MAX_CENTS ? cents : null;
