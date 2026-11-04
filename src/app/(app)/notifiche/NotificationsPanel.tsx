@@ -12,6 +12,7 @@ type Backup = { name: string; size: number | null; url: string | null };
 const ROWS: { key: SettingKey; title: string; hint: string }[] = [
   { key: "projections", title: "Proiezioni sul budget", hint: "«Al ritmo attuale sui ristoranti sforerai di 40 €» (dal giorno 5 del mese)" },
   { key: "budget_alerts", title: "Budget all'80% e superato", hint: "Una volta al mese per categoria, tra le 8 e le 22" },
+  { key: "positive", title: "Quando vai bene", hint: "«Stai andando bene: risparmi 120 € più del solito», serie di giorni sotto la quota (max 1 al giorno, la sera)" },
   { key: "reminder", title: "Promemoria delle 21:00", hint: "Solo se oggi non hai registrato nulla" },
   { key: "daily_analysis", title: "Analisi della sera", hint: "Alle 21:30, con il titolo dell'analisi" },
   { key: "weekly_report", title: "Report del lunedì", hint: "Lunedì alle 8:00, sulla settimana appena finita" },
@@ -28,6 +29,7 @@ const KIND_ICON: Record<string, string> = {
   weekly: "🗓️",
   monthly: "📆",
   backup: "💾",
+  positive: "👏",
 };
 
 function urlB64ToUint8Array(b64: string) {

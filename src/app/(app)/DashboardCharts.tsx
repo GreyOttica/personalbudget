@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ColumnChart, LineChart, type Point, type Series } from "@/components/charts/charts";
 import { CalendarHeatmap } from "@/components/charts/more";
 import type { Daily, MonthPoint } from "@/lib/analytics/dashboard";
+import type { Quota } from "@/lib/analytics/predict";
 import { formatCents, formatEuros, formatInt, formatMonth, formatMonthShort, formatPercent } from "@/lib/format";
 
 // Colori delle serie (slot 1–3 della palette validata): vedi --series-* in globals.css.
@@ -71,7 +72,7 @@ const PER_DAY: Series = { key: "amount", name: "Spese", color: "var(--series-exp
 
 type View = "pace" | "calendar" | "days" | "week";
 
-export function DailyFocus({ daily, isCurrentMonth }: { daily: Daily; isCurrentMonth: boolean }) {
+export function DailyFocus({ daily, isCurrentMonth, quota }: { daily: Daily; isCurrentMonth: boolean; quota?: Quota | null }) {
   const [view, setView] = useState<View>("pace");
   const [withFixed, setWithFixed] = useState(false);
   const n = daily.days.length;
@@ -114,7 +115,7 @@ export function DailyFocus({ daily, isCurrentMonth }: { daily: Daily; isCurrentM
 
   return (
     <div className="card card-padded daily">
-      {daily.today && <TodayCard today={daily.today} source={daily.variableTargetSource} />}
+      {daily.today && (quota ? <QuotaCard today={daily.today} quota={quota} /> : <TodayCard today={daily.today} source={daily.variableTargetSource} />)}
       <div className="segmented" role="tablist" aria-label="Vista giornaliera">
         {(
           [
@@ -236,6 +237,42 @@ export function DailyFocus({ daily, isCurrentMonth }: { daily: Daily; isCurrentM
         </div>
       )}
     </div>
+  );
+}
+
+/** Quota di oggi dalla previsione statistica: obiettivo di risparmio, giorno della settimana, ritmo del mese. */
+function QuotaCard({ today, quota }: { today: NonNullable<Daily["today"]>; quota: Quota }) {
+  const rest = quota.today - quota.spentToday;
+  const over = quota.today <= 0 || rest < 0;
+  const dayHint = quota.weekdayFactor >= 1.15 ? " (oggi di solito spendi di più)" : quota.weekdayFactor <= 0.85 ? " (oggi di solito spendi meno)" : "";
+  return (
+    <>
+      <div className="today">
+        <div className="today-main">
+          <span className="muted small">Oggi</span>
+          <strong className="today-value">{formatEuros(today.spent)}</strong>
+          <span className="muted small">
+            {today.count === 0 ? "nessun movimento" : today.count === 1 ? "1 movimento" : `${today.count} movimenti`}
+            {today.averageDaily > 0 ? ` · media ${formatEuros(today.averageDaily)} al giorno` : ""}
+          </span>
+        </div>
+        <div className={`today-left ${over ? "today-over" : ""}`}>
+          <span className="small">Quota di oggi</span>
+          <strong>{quota.today <= 0 ? "esaurita" : formatEuros(quota.today)}</strong>
+          <span className="small">
+            {quota.today <= 0 ? "il budget variabile del mese è finito" : rest >= 0 ? `ti restano ${formatEuros(rest)}${dayHint}` : `superata di ${formatEuros(-rest)}`}
+          </span>
+        </div>
+      </div>
+      <p className={`small pace-line ${quota.vsPace >= 0 ? "good-text" : "check-diff"}`}>
+        {Math.abs(quota.vsPace) < 500
+          ? "In linea con il ritmo previsto per centrare l'obiettivo di risparmio."
+          : quota.vsPace > 0
+            ? `${formatEuros(quota.vsPace)} sotto il ritmo previsto: stai andando bene.`
+            : `${formatEuros(-quota.vsPace)} sopra il ritmo previsto: la quota dei prossimi giorni è più bassa.`}
+        {quota.streak >= 3 ? ` 🔥 ${quota.streak} giorni di fila sotto la quota.` : ""}
+      </p>
+    </>
   );
 }
 

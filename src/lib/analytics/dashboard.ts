@@ -48,8 +48,11 @@ export type CategoryRow = {
   average: number;
   /** stima a fine mese: solo per il mese in corso */
   forecast: number | null;
-  /** budget proposto: media 6 mesi, o ultimo mese per le spese fisse */
+  /** budget proposto: per le variabili il livello rispettato 2 mesi su 3 (più peso ai mesi recenti); per le fisse il ricorrente o l'ultimo mese */
   proposal: number;
+  /** dalla simulazione (solo mese in corso, categorie variabili): forchetta della stima e probabilità di sforare */
+  forecastBand?: { p10: number; p50: number; p90: number };
+  probOver?: number | null;
 };
 
 export type MonthPoint = {
@@ -120,8 +123,24 @@ const TREND_MONTHS = 12;
 // a inizio mese conta soprattutto la storia, verso fine mese il ritmo attuale.
 const PRIOR_DAYS = 7;
 const WEEKDAY_WEEKS = 12;
+// Proposta di budget: livello rispettato in circa 2 mesi su 3, con i mesi recenti che pesano di più.
+const PROPOSAL_QUANTILE = 0.66;
+const PROPOSAL_HALF_LIFE = 4; // mesi
 
 const WEEKDAY_LABELS = ["lun", "mar", "mer", "gio", "ven", "sab", "dom"];
+
+/** Percentile pesato (pesi ≥ 0) di valori non ordinati. */
+export function weightedQuantile(values: number[], weights: number[], p: number): number {
+  const pairs = values.map((v, i) => [v, weights[i] ?? 0] as const).filter(([, w]) => w > 0).sort((a, b) => a[0] - b[0]);
+  const total = pairs.reduce((s, [, w]) => s + w, 0);
+  if (!total) return 0;
+  let acc = 0;
+  for (const [v, w] of pairs) {
+    acc += w;
+    if (acc / total >= p - 1e-9) return v;
+  }
+  return pairs[pairs.length - 1][0];
+}
 
 /** "2026-10-05" + n giorni */
 export function addDays(isoDate: string, n: number): string {
@@ -219,6 +238,19 @@ export function buildDashboard(input: {
     if (m < firstDataMonth) break;
     history.push(m);
   }
+  // Fino a 12 mesi completi per la proposta di budget (percentile pesato verso i mesi recenti).
+  const proposalMonths: string[] = [];
+  for (let i = 1; i <= TREND_MONTHS; i++) {
+    const m = addMonths(month, -i);
+    if (m < firstDataMonth) break;
+    proposalMonths.push(m);
+  }
+  const variableProposal = (categoryId: string) =>
+    weightedQuantile(
+      proposalMonths.map((m) => spentBy.get(`${m}|${categoryId}`) ?? 0),
+      proposalMonths.map((_, i) => 0.5 ** (i / PROPOSAL_HALF_LIFE)),
+      PROPOSAL_QUANTILE,
+    );
   const prevMonth = addMonths(month, -1);
   const avgOf = (fn: (m: string) => number) => (history.length ? history.reduce((s, m) => s + fn(m), 0) / history.length : 0);
 
@@ -264,7 +296,7 @@ export function buildDashboard(input: {
         status: statusOf(ratio, c.is_fixed),
         average,
         forecast,
-        proposal: roundUp5(ruleMonthly(c.id) || (c.is_fixed ? last || average : average)),
+        proposal: roundUp5(ruleMonthly(c.id) || (c.is_fixed ? last || average : variableProposal(c.id))),
       };
     })
     .filter((r) => r.spent > 0 || r.budget !== null || r.average > 0)
@@ -282,12 +314,14 @@ export function buildDashboard(input: {
     const fInvest = investRules.length
       ? cur.investment + investRules.reduce((s, r) => s + (r.pendingThisMonth ? r.amount_cents : 0), 0)
       : Math.max(cur.investment, investedBy.get(prevMonth) ?? 0);
-    // Entrate attese: ricorrenti di entrata ancora da arrivare, altrimenti almeno quelle del mese scorso
-    // (lo stipendio di solito arriva una volta sola, spesso a fine mese).
+    // Entrate attese: ricorrenti di entrata ancora da arrivare, altrimenti almeno le entrate tipiche
+    // (mediana degli ultimi 3 mesi completi: un rimborso o un bonus una tantum non gonfia la stima).
     const incomeRules = rules.filter((r) => r.type === "income");
+    const lastIncomes = history.slice(0, 3).map((m) => perMonth.get(m)?.income ?? 0).sort((a, b) => a - b);
+    const typicalIncome = lastIncomes.length ? lastIncomes[Math.floor((lastIncomes.length - 1) / 2)] : 0;
     const fIncome = incomeRules.length
       ? cur.income + incomeRules.reduce((s, r) => s + (r.pendingThisMonth ? r.amount_cents : 0), 0)
-      : Math.max(cur.income, perMonth.get(prevMonth)?.income ?? 0);
+      : Math.max(cur.income, typicalIncome);
     forecast = {
       expense: fFixed + fVariable,
       fixed: fFixed,

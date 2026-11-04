@@ -32,6 +32,7 @@ scripts/import-sheet.ts import da riga di comando (alternativa alla pagina /impo
    - [`20261101000006_ai.sql`](supabase/migrations/20261101000006_ai.sql) (Fase 4: analisi AI e chat)
    - [`20261101000007_notifications.sql`](supabase/migrations/20261101000007_notifications.sql) (Fase 5: notifiche, controllo automatico, backup, proposte di budget)
    - [`20261101000008_sync_fixes.sql`](supabase/migrations/20261101000008_sync_fixes.sql) (la coda offline non si blocca con sottocategorie nuove)
+   - [`20261104000009_predictions.sql`](supabase/migrations/20261104000009_predictions.sql) (obiettivo di risparmio e notifiche positive)
 3. **Authentication → Emails → Templates → Magic Link**: sostituisci il corpo del messaggio con
    `<p>Il tuo codice di accesso: <strong>{{ .Token }}</strong></p>` e salva.
    L'app usa il codice e non il link, perché su iPhone il link si aprirebbe in Safari e non nella PWA.
@@ -124,6 +125,29 @@ L'AI di default è **Google Gemini, piano gratuito**. In alternativa si può usa
 - In chat puoi chiedere di **riorganizzare il budget** ("riorganizzami il budget per risparmiare 150 € al mese"): l'AI
   sceglie gli importi, l'app calcola totale, spesa prevista, risparmio e avvisi (`src/lib/analytics/proposal.ts`), e
   la proposta si applica dal mese in corso con il tasto **Applica**.
+
+## Previsioni statistiche
+
+In `src/lib/analytics/predict.ts`, funzioni pure testate in `scripts/test-analytics.ts`. Niente modelli complessi:
+con un anno di dati imparerebbero il rumore.
+
+- **Simulazione Monte Carlo** del resto del mese (2.000 simulazioni): ogni giorno futuro ripesca un giorno vero degli
+  ultimi 180, di preferenza dello stesso giorno della settimana (70%) e con più peso ai giorni recenti (metà peso ogni
+  60 giorni). Si ripesca il giorno intero, quindi restano i legami tra categorie. Le spese fisse non si simulano.
+- Ne escono: stima probabile (mediana) e forchetta 10°–90° percentile delle spese e del risparmio, probabilità di
+  sforare ogni budget (l'avviso "sforerai" parte dal 65%), probabilità di risparmiare più del solito.
+- **Risparmio "di solito"**: media esponenziale dei mesi completi (metà peso ogni 3 mesi). **Entrate attese**:
+  ricorrenti, altrimenti la mediana degli ultimi 3 mesi (un rimborso una tantum non gonfia la stima).
+- **Quota giornaliera**: (entrate attese − fisse − obiettivo di risparmio − variabili già spese), ripartita sui giorni
+  rimasti in base a quanto spendi di solito in quel giorno della settimana. Obiettivo: Budget → Obiettivo di
+  risparmio, oppure "come di solito".
+- **Budget proposti**: per le variabili il livello rispettato circa 2 mesi su 3 negli ultimi 12 (percentile 66 pesato
+  verso i mesi recenti), non la media.
+- **Precisione**: la simulazione viene rifatta il 15 di ciascuno degli ultimi 6 mesi con i soli dati di allora e
+  confrontata con il totale vero; l'errore medio è mostrato in Home.
+- **Notifiche positive** (19–22, al massimo una al giorno): "stai andando bene" se la probabilità di risparmiare almeno
+  30 € più del solito è ≥ 75% (dal giorno 8, una volta a settimana) e serie di 5, 10, 15… giorni sotto la quota. Non
+  partono se non registri movimenti da più di 2 giorni.
 
 ## Notifiche, report e backup (Fase 5)
 

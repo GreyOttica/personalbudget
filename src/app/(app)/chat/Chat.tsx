@@ -12,9 +12,9 @@ const nextId = (prefix: string) => `${prefix}${++seq}`;
 const SUGGESTIONS = [
   "Posso permettermi un viaggio da 800 € a dicembre?",
   "Come sto andando questo mese rispetto al solito?",
-  "Dove posso risparmiare di più?",
   "Riorganizzami il budget per risparmiare 150 € al mese",
   "A questo ritmo sforerò qualche budget questo mese?",
+  "Quanto posso spendere oggi?",
 ];
 
 const TOOL_LABEL: Record<string, string> = {

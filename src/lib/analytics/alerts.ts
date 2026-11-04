@@ -16,6 +16,8 @@ export type BudgetSignal = {
   spent: number;
   budget: number;
   forecast: number | null;
+  /** probabilità di sforare (dalla simulazione), se disponibile */
+  probOver: number | null;
   /** quanto si può ancora spendere al giorno fino a fine mese (centesimi), se resta qualcosa */
   perDayLeft: number | null;
   daysLeft: number;
@@ -40,6 +42,7 @@ export function budgetSignals(d: Pick<Dashboard, "categories" | "isCurrentMonth"
       spent: c.spent,
       budget: c.budget,
       forecast: c.forecast,
+      probOver: c.probOver ?? null,
       daysLeft,
       perDayLeft: c.spent < c.budget ? Math.floor((c.budget - c.spent) / daysLeft) : null,
     };
@@ -51,8 +54,12 @@ export function budgetSignals(d: Pick<Dashboard, "categories" | "isCurrentMonth"
   return out.sort((a, b) => rank[a.level] - rank[b.level] || overshoot(b) - overshoot(a));
 }
 
+/** Con la simulazione basta una probabilità di sforare del 65%; senza, si usa la stima puntuale. */
+export const PROJECTION_MIN_PROBABILITY = 0.65;
+
 function willOvershoot(c: CategoryRow, day: number) {
   if (c.forecast === null || !c.budget || day < PROJECTION_MIN_DAY) return false;
+  if (c.probOver != null && c.probOver < PROJECTION_MIN_PROBABILITY) return false;
   const extra = c.forecast - c.budget;
   return extra >= Math.max(MIN_OVERSHOOT_CENTS, c.budget * MIN_OVERSHOOT_RATIO);
 }
@@ -72,8 +79,9 @@ export function signalText(s: BudgetSignal): { title: string; body: string } {
       title: `${s.emoji} ${s.name}: oltre l'80% del budget`,
       body: `${eur(s.spent)} su ${eur(s.budget)} (${Math.round((s.spent / s.budget) * 100)}%).${left}`,
     };
+  const prob = s.probOver != null ? ` Probabilità di sforare: ${s.probOver > 0.95 ? "oltre il 95" : Math.round(s.probOver * 100)}%.` : "";
   return {
     title: `${s.emoji} ${s.name}: così sforerai il budget`,
-    body: `Al ritmo attuale arriverai a ${eur(s.forecast ?? s.spent)} su ${eur(s.budget)} (+${eur((s.forecast ?? s.spent) - s.budget)}).${left}`,
+    body: `Al ritmo attuale arriverai a ${eur(s.forecast ?? s.spent)} su ${eur(s.budget)} (+${eur((s.forecast ?? s.spent) - s.budget)}).${prob}${left}`,
   };
 }

@@ -5,12 +5,13 @@ import { SyncBadge } from "@/components/SyncBadge";
 import { addMonths, monthOf, type Dashboard } from "@/lib/analytics/dashboard";
 import { loadDashboard, parseMonth } from "@/lib/analytics/load";
 import { romeDate } from "@/lib/entry/amount";
-import { formatEuros, formatMonth, formatMonthName, formatPercent } from "@/lib/format";
+import { formatEuros, formatMonth, formatMonthName, formatPercent, formatProbability } from "@/lib/format";
 import { categoryColorSlots, composition, smallSpends } from "@/lib/analytics/insights";
 import { DailyFocus, TrendCharts } from "./DashboardCharts";
 import { KIND_LABEL, periodLabel, type AnalysisRow } from "@/components/AnalysisCard";
 import { createClient } from "@/lib/supabase/server";
 import { budgetSignals, type BudgetSignal } from "@/lib/analytics/alerts";
+import type { Accuracy, Prediction } from "@/lib/analytics/predict";
 import { Composition, MonthFlow, SmallSpends, VersusUsual } from "./HomeInsights";
 
 export const metadata: Metadata = { title: "Home" };
@@ -18,7 +19,7 @@ export const metadata: Metadata = { title: "Home" };
 export default async function Home({ searchParams }: { searchParams: Promise<{ m?: string }> }) {
   const { m } = await searchParams;
   const month = parseMonth(m);
-  const { dashboard: d, categories, subcategories, txns } = await loadDashboard(month);
+  const { dashboard: d, categories, subcategories, txns, prediction, accuracy } = await loadDashboard(month);
   const slots = categoryColorSlots(txns, month);
   const comp = composition(txns, categories, month, slots);
   const small = smallSpends(txns, categories, subcategories, month);
@@ -63,7 +64,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
         </section>
       ) : (
         <>
-          <Hero d={d} monthName={monthName} />
+          <Hero d={d} monthName={monthName} p={prediction} accuracy={accuracy} />
           <Tiles d={d} />
           {signals.length > 0 && <Alerts signals={signals} />}
           {latestAi && <AiCard a={latestAi} />}
@@ -71,7 +72,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
             <div className="section-head">
               <h2>Giorno per giorno</h2>
             </div>
-            <DailyFocus daily={d.daily} isCurrentMonth={d.isCurrentMonth} />
+            <DailyFocus daily={d.daily} isCurrentMonth={d.isCurrentMonth} quota={prediction?.quota ?? null} />
           </section>
           <section className="section">
             <div className="section-head">
@@ -121,7 +122,7 @@ function budgetedForecastRatio(d: Dashboard): number | null {
 
 const FORECAST_TEXT = { over: "Supererai il budget", warning: "Vicino al limite", ok: "In linea", none: undefined } as const;
 
-function Hero({ d, monthName }: { d: Dashboard; monthName: string }) {
+function Hero({ d, monthName, p, accuracy }: { d: Dashboard; monthName: string; p: Prediction | null; accuracy: Accuracy | null }) {
   const { budget, forecast } = d;
   return (
     <section className="card hero">
@@ -152,6 +153,11 @@ function Hero({ d, monthName }: { d: Dashboard; monthName: string }) {
             <div>
               <span className="muted small">Stima a fine mese</span>
               <strong>{formatEuros(forecast.expense)}</strong>
+              {p && p.expense.p90 - p.expense.p10 >= 1000 && (
+                <span className="muted small">
+                  probabilmente tra {formatEuros(p.expense.p10)} e {formatEuros(p.expense.p90)}
+                </span>
+              )}
             </div>
             <div className="hero-forecast-right">
               <span className="muted small">
@@ -160,9 +166,21 @@ function Hero({ d, monthName }: { d: Dashboard; monthName: string }) {
               <StatusLabel status={d.budget.forecastStatus} text={FORECAST_TEXT[d.budget.forecastStatus]} />
             </div>
           </div>
+          {p && (
+            <div className="hero-savings">
+              <span className="muted small">Risparmio previsto</span>
+              <strong className={p.savings.p50 >= 0 ? undefined : "check-diff"}>{formatEuros(p.savings.p50)}</strong>
+              <span className="muted small">
+                tra {formatEuros(p.savings.p10)} e {formatEuros(p.savings.p90)}
+                {p.usualSavings !== null && ` · di solito ${formatEuros(p.usualSavings)}`}
+                {p.probAboveUsual !== null && ` · probabilità di fare meglio del solito: ${formatProbability(p.probAboveUsual)}`}
+              </span>
+            </div>
+          )}
           <p className="muted small hero-note">
-            Fisse {formatEuros(forecast.fixed)} (ricorrenti o, se mancano, come il mese scorso: non proiettate) + variabili{" "}
-            {formatEuros(forecast.variable)} (ritmo attuale corretto con la tua media).
+            Fisse {formatEuros(forecast.fixed)} (ricorrenti o, se mancano, come il mese scorso). Variabili{" "}
+            {formatEuros(forecast.variable)}: {p ? `simulazione su ${p.historyDays} giorni del tuo storico, con più peso ai giorni recenti e al giorno della settimana` : "ritmo attuale corretto con la tua media"}.
+            {accuracy?.error != null && accuracy.months >= 2 && ` Verificata sugli ultimi ${accuracy.months} mesi: a metà mese sbaglia in media del ${Math.round(accuracy.error * 100)}%.`}
           </p>
         </>
       )}
@@ -226,7 +244,7 @@ function Alerts({ signals }: { signals: BudgetSignal[] }) {
             <strong>{a.name}</strong>
             <span className="muted small">
               {a.level === "projection"
-                ? `al ritmo attuale ${formatEuros(a.forecast ?? a.spent)} su ${formatEuros(a.budget)} · +${formatEuros((a.forecast ?? a.spent) - a.budget)}${a.perDayLeft !== null ? ` · ${formatEuros(a.perDayLeft)}/giorno per restare nel budget` : ""}`
+                ? `al ritmo attuale ${formatEuros(a.forecast ?? a.spent)} su ${formatEuros(a.budget)} · +${formatEuros((a.forecast ?? a.spent) - a.budget)}${a.probOver != null ? ` · probabilità ${formatProbability(a.probOver)}` : ""}${a.perDayLeft !== null ? ` · ${formatEuros(a.perDayLeft)}/giorno per restare nel budget` : ""}`
                 : `${formatEuros(a.spent)} su ${formatEuros(a.budget)}${a.level === "over" ? ` · +${formatEuros(a.spent - a.budget)}` : ` · ${formatPercent(a.spent / a.budget)}`}`}
             </span>
           </div>

@@ -1,14 +1,15 @@
 import "server-only";
 import { budgetSignals, signalText } from "@/lib/analytics/alerts";
 import { monthOf } from "@/lib/analytics/dashboard";
-import { dashboardFor } from "@/lib/ai/facts";
+import { predictionFor } from "@/lib/ai/facts";
 import { loadAll } from "@/lib/analytics/loadAll";
 import { runAnalysis } from "@/lib/ai/analyze";
 import { aiConfigured } from "@/lib/ai/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { runBackup } from "./backup";
 import { sendPush } from "./push";
-import { alertsAllowed, dueJobs, romeNow } from "./time";
+import { positiveMessage } from "./positive";
+import { alertsAllowed, atOrAfter, dueJobs, romeNow } from "./time";
 
 type Admin = ReturnType<typeof createAdminClient>;
 type Settings = {
@@ -19,8 +20,9 @@ type Settings = {
   weekly_report: boolean;
   monthly_report: boolean;
   backup: boolean;
+  positive: boolean;
 };
-const DEFAULTS: Settings = { budget_alerts: true, projections: true, reminder: true, daily_analysis: true, weekly_report: true, monthly_report: true, backup: true };
+const DEFAULTS: Settings = { budget_alerts: true, projections: true, reminder: true, daily_analysis: true, weekly_report: true, monthly_report: true, backup: true, positive: true };
 const MAX_ALERTS_PER_TICK = 3;
 
 /** Un job prenotato ma mai concluso (funzione interrotta dal timeout) si può riprendere dopo 10 minuti. */
@@ -62,10 +64,12 @@ export async function runTick(at = new Date()) {
   await admin.rpc("generate_recurring", { p_today: t.date });
 
   // 1. Avvisi sul budget: 80%, 100% e "al ritmo attuale sforerai".
+  const month = monthOf(t.date);
+  let facts: Parameters<typeof predictionFor>[0] | null = null;
+  const data = async () => (facts ??= { ...(await loadAll(admin as never)), today: t.date });
+
   if (alertsAllowed(t) && (settings.budget_alerts || settings.projections)) {
-    const all = await loadAll(admin as never);
-    const month = monthOf(t.date);
-    const d = dashboardFor({ ...all, today: t.date }, month);
+    const d = predictionFor(await data(), month).dashboard;
     const signals = budgetSignals(d).filter((x) => (x.level === "projection" ? settings.projections : settings.budget_alerts));
     let n = 0;
     for (const sig of signals) {
@@ -87,7 +91,30 @@ export async function runTick(at = new Date()) {
     }
   }
 
-  // 2. Job a orario: promemoria, analisi, report, backup.
+  // 2. Notifiche positive (tra le 19 e le 22, al massimo una al giorno), solo se la statistica è abbastanza sicura.
+  if (settings.positive && atOrAfter(t, 19) && !atOrAfter(t, 22)) {
+    const input = await data();
+    const { data: last } = await admin
+      .from("transactions")
+      .select("occurred_on")
+      .is("deleted_at", null)
+      .neq("source", "recurring")
+      .neq("source", "import")
+      .order("occurred_on", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const msg = positiveMessage(predictionFor(input, month).prediction, t.date, t.day, last?.occurred_on ?? null);
+    if (msg && (await claim(admin, msg.key, "positive"))) {
+      if (await claim(admin, `positive:${t.date}`, "positive_day")) {
+        const sent = await sendPush(admin, { title: msg.title, body: msg.body, url: "/", tag: "positive" });
+        await record(admin, msg.key, msg.title, msg.body, sent);
+        await record(admin, `positive:${t.date}`, "", "", 0);
+        done.push(msg.key);
+      } else await release(admin, msg.key); // oggi ne è già partita una: ci riprova domani
+    }
+  }
+
+  // 3. Job a orario: promemoria, analisi, report, backup.
   let aiUsed = false;
   for (const job of dueJobs(t)) {
     const enabled =
@@ -134,3 +161,4 @@ export async function runTick(at = new Date()) {
   }
   return { at: t, done };
 }
+

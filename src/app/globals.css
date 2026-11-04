@@ -3168,3 +3168,41 @@ input[aria-invalid="true"] {
   padding-left: 18px;
   color: var(--critical-text);
 }
+
+/* Previsioni statistiche */
+.hero-forecast > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+.hero-savings {
+  display: grid;
+  gap: 2px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.hero-savings strong {
+  font-size: 1.25rem;
+}
+.pace-line {
+  margin: 8px 0 0;
+}
+.savings-target-page {
+  padding-top: 0;
+}
+.savings-target {
+  display: grid;
+  gap: 10px;
+}
+.savings-target p {
+  margin: 0;
+}
+.savings-target-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.savings-target-row .field {
+  flex: 1;
+  margin: 0;
+}

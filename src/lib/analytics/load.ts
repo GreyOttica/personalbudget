@@ -3,6 +3,7 @@ import { romeDate } from "@/lib/entry/amount";
 import { addMonths, buildDashboard, monthOf, type AnalyticsTxn } from "./dashboard";
 import { rulesForDashboard, type InsightTxn } from "./insights";
 import { loadAll } from "./loadAll";
+import { applyPrediction, backtest, predictMonth } from "./predict";
 
 /** Mese valido "YYYY-MM" dal parametro dell'URL, altrimenti il mese in corso a Roma. */
 export function parseMonth(value: string | undefined): string {
@@ -28,5 +29,21 @@ export async function loadDashboard(month: string) {
     today: romeDate(),
     rules: month === monthOf(romeDate()) ? rulesForDashboard(all.rules, romeDate()) : [],
   });
-  return { dashboard, categories: all.categories, subcategories: all.subcategories, txns: all.txns, rules: all.rules };
+  // Mese in corso: stime dalla simulazione statistica e precisione misurata sui mesi passati.
+  const current = month === monthOf(romeDate());
+  const analyticTxns = all.txns.filter((t) => t.type !== "opening_balance");
+  const prediction = current
+    ? predictMonth({ txns: analyticTxns, categories: all.categories, dashboard, today: romeDate(), savingsTarget: all.savingsTarget })
+    : null;
+  const accuracy = current ? backtest(analyticTxns, all.categories, month) : null;
+  return {
+    dashboard: applyPrediction(dashboard, prediction),
+    prediction,
+    accuracy,
+    savingsTarget: all.savingsTarget,
+    categories: all.categories,
+    subcategories: all.subcategories,
+    txns: all.txns,
+    rules: all.rules,
+  };
 }

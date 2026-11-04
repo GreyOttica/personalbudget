@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Meter, StatusLabel } from "@/components/Meter";
 import type { BudgetStatus } from "@/lib/analytics/dashboard";
 import { centsToInput, parseAmount } from "@/lib/entry/amount";
-import { formatEuros } from "@/lib/format";
+import { formatEuros, formatProbability } from "@/lib/format";
 import { saveBudgets } from "./actions";
 
 type Row = {
@@ -18,6 +18,7 @@ type Row = {
   spent: number;
   forecast: number | null;
   status: BudgetStatus;
+  probOver: number | null;
 };
 
 const toText = (cents: number | null) => (cents ? centsToInput(cents).replace(/,00$/, "") : "");
@@ -66,8 +67,9 @@ export function BudgetEditor({ rows, months }: { rows: Row[]; months: number }) 
         <div>
           <strong>Proposta: {formatEuros(proposalTotal)} al mese</strong>
           <p className="muted small">
-            Media degli ultimi {months} {months === 1 ? "mese" : "mesi"} per categoria, arrotondata a 5 €; per le spese fisse
-            l&apos;importo del mese scorso.
+            Per ogni categoria il livello che hai rispettato circa 2 mesi su 3 negli ultimi {months >= 12 ? 12 : months}{" "}
+            {months === 1 ? "mese" : "mesi"}, con più peso ai mesi recenti: raggiungibile ma non largo. Arrotondato a 5 €; per le
+            spese fisse il ricorrente o l&apos;importo del mese scorso.
           </p>
         </div>
         <button type="button" className="button button-secondary" onClick={applyProposals}>
@@ -93,6 +95,11 @@ export function BudgetEditor({ rows, months }: { rows: Row[]; months: number }) 
                   {r.forecast !== null && r.forecast > r.spent ? ` · stima ${formatEuros(r.forecast)}` : ""} · media {formatEuros(r.average)}
                   {r.proposal !== r.average && r.proposal > 0 ? ` · proposta ${formatEuros(r.proposal)}` : ""}
                 </span>
+                {r.probOver != null && r.budget !== null && r.status !== "over" && (
+                  <span className={`small ${r.probOver >= 0.65 ? "check-diff" : r.probOver <= 0.2 ? "good-text" : "muted"}`}>
+                    Probabilità di sforare: {formatProbability(r.probOver)}
+                  </span>
+                )}
                 {r.budget !== null && (
                   <div className="budget-meter">
                     <Meter

@@ -34,3 +34,19 @@ export async function saveBudgets(entries: { categoryId: string; cents: number }
   revalidatePath("/budget");
   return { ok: true };
 }
+
+/** Obiettivo di risparmio mensile (centesimi); null = "come di solito". */
+export async function saveSavingsTarget(cents: number | null): Promise<SaveBudgetsResult> {
+  try {
+    await requireOwner();
+  } catch {
+    return { ok: false, error: "Sessione scaduta: esci e rientra." };
+  }
+  if (cents !== null && (!Number.isInteger(cents) || cents < 0 || cents > 10_000_000_00)) return { ok: false, error: "Importo non valido." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("preferences").update({ savings_target_cents: cents, updated_at: new Date().toISOString() }).eq("id", true);
+  if (error) return { ok: false, error: /preferences|does not exist|could not find/i.test(error.message) ? "Esegui prima su Supabase la migrazione 20261104000009_predictions.sql." : error.message };
+  revalidatePath("/");
+  revalidatePath("/budget");
+  return { ok: true };
+}

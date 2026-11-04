@@ -44,7 +44,7 @@ async function fetchOptional<T>(query: (from: number, to: number) => PromiseLike
 export async function loadAll(client?: Client) {
   const supabase = client ?? (await createClient());
   await generateRecurring(supabase);
-  const [categories, subcategories, budgets, txns, rules, checkpoints, goals] = await Promise.all([
+  const [categories, subcategories, budgets, txns, rules, checkpoints, goals, prefs] = await Promise.all([
     fetchAll<AnalyticsCategory>((a, b) => supabase.from("categories").select("id, name, emoji, kind, is_fixed").order("sort_order").range(a, b)),
     fetchAll<AnalyticsSubcategory>((a, b) => supabase.from("subcategories").select("id, category_id, name").range(a, b)),
     fetchAll<BudgetRow>((a, b) => supabase.from("budgets").select("category_id, valid_from, amount_cents").range(a, b)),
@@ -68,6 +68,7 @@ export async function loadAll(client?: Client) {
     fetchOptional<Goal>((a, b) =>
       supabase.from("goals").select("id, name, emoji, target_cents, saved_cents, target_date").is("archived_at", null).range(a, b),
     ),
+    fetchOptional<{ savings_target_cents: number | null }>((a, b) => supabase.from("preferences").select("savings_target_cents").range(a, b)),
   ]);
   return {
     categories,
@@ -77,5 +78,7 @@ export async function loadAll(client?: Client) {
     rules: rules.map((r) => ({ ...r, amount_cents: Number(r.amount_cents) })),
     checkpoints: checkpoints.map((c) => ({ ...c, balance_cents: Number(c.balance_cents) })),
     goals: goals.map((g) => ({ ...g, target_cents: Number(g.target_cents), saved_cents: Number(g.saved_cents) })),
+    /** obiettivo di risparmio mensile (centesimi); null = "come di solito" */
+    savingsTarget: prefs[0]?.savings_target_cents == null ? null : Number(prefs[0].savings_target_cents),
   };
 }

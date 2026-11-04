@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { loadDashboard, parseMonth } from "@/lib/analytics/load";
 import { BudgetEditor } from "./BudgetEditor";
+import { SavingsTarget } from "./SavingsTarget";
 
 export const metadata: Metadata = { title: "Budget" };
 
 export default async function BudgetPage() {
   const month = parseMonth(undefined);
-  const { dashboard, categories } = await loadDashboard(month);
+  const { dashboard, categories, prediction, savingsTarget } = await loadDashboard(month);
   const byId = new Map(dashboard.categories.map((c) => [c.id, c]));
   const rows = categories
     .filter((c) => c.kind === "expense")
@@ -23,9 +24,15 @@ export default async function BudgetPage() {
         spent: r?.spent ?? 0,
         forecast: r?.forecast ?? null,
         status: r?.status ?? ("none" as const),
+        probOver: r?.probOver ?? null,
       };
     })
     .sort((a, b) => b.average - a.average || a.name.localeCompare(b.name));
 
-  return <BudgetEditor rows={rows} months={dashboard.averages.months} />;
+  return (
+    <>
+      <BudgetEditor rows={rows} months={dashboard.averages.months} />
+      <SavingsTarget current={savingsTarget} usual={prediction?.usualSavings ?? null} income={prediction?.income ?? null} />
+    </>
+  );
 }

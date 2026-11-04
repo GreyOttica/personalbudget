@@ -41,7 +41,7 @@ export default async function NotificationsPage() {
     vapidKeys(admin),
     admin.from("app_config").select("last_tick_at, app_url").eq("id", true).single(),
     supabase.from("push_subscriptions").select("endpoint", { count: "exact", head: true }),
-    supabase.from("notification_log").select("key, kind, title, body, sent, created_at").not("title", "is", null).order("created_at", { ascending: false }).limit(15),
+    supabase.from("notification_log").select("key, kind, title, body, sent, created_at").not("title", "is", null).neq("kind", "positive_day").order("created_at", { ascending: false }).limit(15),
     listBackups(admin),
   ]);
 

@@ -3,6 +3,7 @@
 // questi oggetti, e l'impatto dei consigli viene dalle "leve" calcolate qui.
 // Funzioni pure, testate in scripts/test-analytics.ts.
 import { budgetSignals } from "../analytics/alerts.ts";
+import { applyPrediction, ewma, predictMonth, type Prediction } from "../analytics/predict.ts";
 import {
   addDays,
   addMonths,
@@ -38,6 +39,8 @@ export type FactsInput = {
   checkpoints: Checkpoint[];
   goals: Goal[];
   today: string;
+  /** obiettivo di risparmio mensile (centesimi); null o assente = "come di solito" */
+  savingsTarget?: number | null;
 };
 
 export type Lever = { id: string; tipo: string; descrizione: string; euro_mese: number; euro_anno: number; base: string };
@@ -51,7 +54,30 @@ const monthLabel = (m: string) => monthName.format(new Date(`${m}-01T00:00:00Z`)
 const analytic = (txns: InsightTxn[]) =>
   txns.filter((t): t is InsightTxn & { type: AnalyticsTxn["type"] } => t.type !== "opening_balance");
 
+/** Dashboard del mese; per il mese in corso con le stime della simulazione statistica (predict.ts). */
 export function dashboardFor(input: FactsInput, month: string): Dashboard {
+  return predictionFor(input, month).dashboard;
+}
+
+const predictionCache = new WeakMap<FactsInput, Map<string, { dashboard: Dashboard; prediction: Prediction | null }>>();
+
+/** Dashboard e previsione del mese (la previsione solo per il mese in corso). Calcolate una volta per input. */
+export function predictionFor(input: FactsInput, month: string): { dashboard: Dashboard; prediction: Prediction | null } {
+  let byMonth = predictionCache.get(input);
+  if (!byMonth) predictionCache.set(input, (byMonth = new Map()));
+  const hit = byMonth.get(month);
+  if (hit) return hit;
+  const base = baseDashboard(input, month);
+  const prediction =
+    month === monthOf(input.today)
+      ? predictMonth({ txns: analytic(input.txns), categories: input.categories, dashboard: base, today: input.today, savingsTarget: input.savingsTarget })
+      : null;
+  const out = { dashboard: applyPrediction(base, prediction), prediction };
+  byMonth.set(month, out);
+  return out;
+}
+
+function baseDashboard(input: FactsInput, month: string): Dashboard {
   const since = `${addMonths(month, -12)}-01`;
   const until = `${addMonths(month, 1)}-01`;
   return buildDashboard({
@@ -67,7 +93,7 @@ export function dashboardFor(input: FactsInput, month: string): Dashboard {
 
 /** Riepilogo compatto di un mese (in corso o chiuso). */
 export function monthFacts(input: FactsInput, month: string) {
-  const d = dashboardFor(input, month);
+  const { dashboard: d, prediction: p } = predictionFor(input, month);
   const categorie = d.categories
     .filter((c) => c.spent > 0 || c.budget !== null)
     .sort((a, b) => b.spent - a.spent)
@@ -81,6 +107,8 @@ export function monthFacts(input: FactsInput, month: string) {
       stima_fine_mese: c.forecast === null ? undefined : eur(c.forecast),
       media_mensile: eur(c.average),
       stato: c.status === "none" ? undefined : c.status === "ok" ? "ok" : c.status === "warning" ? "oltre_80" : "superato",
+      stima_tra: c.forecastBand ? `${eur(c.forecastBand.p10)}-${eur(c.forecastBand.p90)}` : undefined,
+      prob_sforare_budget_pct: c.probOver == null ? undefined : Math.round(c.probOver * 100),
     }));
   return {
     mese: monthLabel(month),
@@ -102,6 +130,23 @@ export function monthFacts(input: FactsInput, month: string) {
     media_risparmio_pct: pct(d.averages.savingsRate),
     mesi_di_storia: d.averages.months,
     categorie,
+    // Previsione statistica (simulazione sui giorni dello storico): forchette 10°–90° percentile.
+    previsione: p
+      ? {
+          spese_fine_mese_probabili: eur(p.expense.p50),
+          spese_fine_mese_tra: [eur(p.expense.p10), eur(p.expense.p90)],
+          risparmio_fine_mese_probabile: eur(p.savings.p50),
+          risparmio_fine_mese_tra: [eur(p.savings.p10), eur(p.savings.p90)],
+          risparmio_di_solito: p.usualSavings === null ? undefined : eur(p.usualSavings),
+          prob_risparmiare_piu_del_solito_pct: p.probAboveUsual === null ? undefined : Math.round(p.probAboveUsual * 100),
+          obiettivo_risparmio: eur(p.savingsTarget),
+          obiettivo_scelto_da: p.targetSource === "custom" ? "utente" : "media recente",
+          quota_spesa_variabile_oggi: p.quota ? eur(p.quota.today) : undefined,
+          rispetto_al_ritmo_previsto: p.quota ? eur(p.quota.vsPace) : undefined, // positivo = speso meno del previsto
+          giorni_di_fila_sotto_quota: p.quota?.streak,
+          giorni_di_storico_usati: p.historyDays,
+        }
+      : undefined,
     // Categorie che al ritmo attuale sforeranno (o hanno già superato) il budget.
     avvisi_budget: budgetSignals(d).map((x) => ({
       categoria: x.name,
@@ -110,6 +155,7 @@ export function monthFacts(input: FactsInput, month: string) {
       budget: eur(x.budget),
       stima_fine_mese: x.forecast === null ? undefined : eur(x.forecast),
       sforamento_previsto: x.forecast === null ? undefined : Math.max(0, eur(x.forecast - x.budget)),
+      prob_sforare_pct: x.probOver == null ? undefined : Math.round(x.probOver * 100),
       al_giorno_per_restare_nel_budget: x.perDayLeft === null ? undefined : eur(x.perDayLeft),
     })),
     _d: d, // per uso interno (anomalie, leve): rimosso prima di inviare
@@ -429,7 +475,8 @@ export function projection(input: FactsInput, targetMonth: string, spendEuro?: n
     ? d.forecast.income - d.totals.income - (d.forecast.expense - d.totals.expense) - (d.forecast.investment - d.totals.investment)
     : 0;
   const history = d.trend.filter((p) => p.month < current).slice(-6);
-  const netAvg = history.length ? history.reduce((s, p) => s + (p.income - p.expense - p.investment), 0) / history.length : 0;
+  // Risparmio netto medio con più peso ai mesi recenti (media esponenziale, metà peso ogni 3 mesi).
+  const netAvg = ewma(history.map((p) => p.income - p.expense - p.investment), 3) ?? 0;
   const [ty, tm] = targetMonth.split("-").map(Number);
   const [cy, cm] = current.split("-").map(Number);
   const monthsAhead = Math.max(0, (ty - cy) * 12 + (tm - cm));

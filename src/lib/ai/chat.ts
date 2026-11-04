@@ -41,7 +41,7 @@ function tools(input: FactsInput, ctx: Ctx): ToolDef[] {
   return [
     tool({
       name: "riepilogo_mese",
-      description: "Riepilogo di un mese: entrate, spese (fisse e variabili), investito, risparmio, stima di fine mese se in corso, budget e categorie con media.",
+      description: "Riepilogo di un mese: entrate, spese (fisse e variabili), investito, risparmio, budget e categorie con media. Per il mese in corso anche la previsione statistica: stime con forchetta, probabilità di sforare, risparmio probabile, quota di spesa di oggi e ritmo.",
       inputSchema: z.object({ mese: MONTH.optional().describe("Default: mese in corso") }),
       run: async ({ mese }) => json(strip(monthFacts(input, mese && mese <= current ? mese : current))),
     }),

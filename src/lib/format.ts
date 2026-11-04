@@ -25,3 +25,6 @@ export const formatInt = (n: number) => intFmt.format(n);
 export const formatMonthShort = (month: string) => monthShort.format(new Date(`${month}-01T00:00:00Z`)).replace(".", "");
 /** "2026-10" → "ottobre" */
 export const formatMonthName = (month: string) => monthOnly.format(new Date(`${month}-01T00:00:00Z`));
+
+/** Probabilità da simulazione: niente "0%" o "100%", che sembrerebbero certezze. */
+export const formatProbability = (p: number) => (p < 0.05 ? "meno del 5%" : p > 0.95 ? "oltre il 95%" : `${Math.round(p * 100)}%`);

@@ -537,3 +537,90 @@ test("buildProposal: 0 € toglie il budget e nella stima conta la media", () =>
   assert.equal(p.summary.spesa_prevista_con_proposta, 240 + 300);
   assert.equal(p.summary.budget_totale_proposto, 0);
 });
+
+// --- Previsioni statistiche (predict.ts) e notifiche positive ------------------------
+import { applyPrediction, backtest, ewma, predictMonth, weightedQuantile } from "../src/lib/analytics/predict.ts";
+import { positiveMessage } from "../src/lib/notify/positive.ts";
+import { buildDashboard as buildD, addDays as plusDays, weekdayOf as wd } from "../src/lib/analytics/dashboard.ts";
+
+test("ewma e percentile pesato", () => {
+  assert.equal(ewma([], 3), null);
+  assert.equal(ewma([100, 100, 100], 3), 100);
+  assert.ok(ewma([0, 0, 300], 1)! > 100, "l'ultimo mese pesa di più della media semplice");
+  assert.equal(weightedQuantile([10, 20, 30], [1, 1, 1], 0.66), 20);
+  assert.equal(weightedQuantile([10, 20, 30], [1, 1, 10], 0.66), 30);
+});
+
+/** Storico sintetico: stipendio 2000 € il 27, affitto 900 € fisso il 1°, spesa 10 €/giorno feriale e 40 € il sabato. */
+function synthetic(until: string) {
+  const cats = [
+    { id: "sti", name: "Stipendio", emoji: "💼", kind: "income" as const, is_fixed: false },
+    { id: "aff", name: "Affitto", emoji: "🔑", kind: "expense" as const, is_fixed: true },
+    { id: "var", name: "Cibo", emoji: "🍝", kind: "expense" as const, is_fixed: false },
+  ];
+  const txns: { occurred_on: string; type: "expense" | "income"; amount_cents: number; category_id: string; subcategory_id: null }[] = [];
+  for (let d = "2026-04-01"; d < until; d = plusDays(d, 1)) {
+    if (d.endsWith("-01")) txns.push({ occurred_on: d, type: "expense", amount_cents: 90000, category_id: "aff", subcategory_id: null });
+    if (d.endsWith("-27")) txns.push({ occurred_on: d, type: "income", amount_cents: 200000, category_id: "sti", subcategory_id: null });
+    txns.push({ occurred_on: d, type: "expense", amount_cents: wd(d) === 5 ? 4000 : 1000, category_id: "var", subcategory_id: null });
+  }
+  return { cats, txns };
+}
+
+test("predictMonth: forchetta, entrate attese, probabilità di sforare e quota giornaliera", () => {
+  const today = "2026-11-10"; // martedì
+  const { cats, txns } = synthetic(plusDays(today, 1));
+  const budgets = [{ category_id: "var", valid_from: "2026-11-01", amount_cents: 30000 }];
+  const d = buildD({ txns: txns.filter((t) => t.occurred_on >= "2025-11-01"), categories: cats, subcategories: [], budgets, month: "2026-11", today });
+  const p = predictMonth({ txns, categories: cats, dashboard: d, today, sims: 800 })!;
+  assert.ok(p, "previsione per il mese in corso");
+  // 20 giorni ancora: 17 feriali × 10 € + 3 sabati × 40 € ≈ 290 €, più i 10 giorni già spesi.
+  const spentSoFar = d.categories.find((c) => c.id === "var")!.spent;
+  assert.ok(Math.abs(p.variable.p50 - (spentSoFar + 29000)) <= 3000, `mediana ${p.variable.p50} vicina a ${spentSoFar + 29000}`);
+  assert.ok(p.variable.p10 <= p.variable.p50 && p.variable.p50 <= p.variable.p90);
+  assert.equal(p.income, 200000, "lo stipendio del 27 è atteso anche se non è ancora arrivato");
+  assert.equal(p.fixed, 90000);
+  assert.ok(p.categories.get("var")!.probOver! > 0.9, "con budget 300 € e stima ~400 € lo sforamento è quasi certo");
+  assert.ok(p.usualSavings !== null && Math.abs(p.usualSavings - (200000 - 90000 - 43000)) < 6000, `risparmio di solito ${p.usualSavings}`);
+  assert.ok(p.quota && p.quota.weekdayFactor < 1, "il martedì si spende meno della media");
+  assert.equal(p.quota!.spentToday, 1000);
+  // Stesso giorno → stessi numeri (semi fisso).
+  assert.deepEqual(predictMonth({ txns, categories: cats, dashboard: d, today, sims: 800 })!.variable, p.variable);
+  // applyPrediction: la stima della categoria diventa la mediana simulata.
+  const d2 = applyPrediction(d, p);
+  assert.equal(d2.categories.find((c) => c.id === "var")!.forecast, p.categories.get("var")!.p50);
+  assert.equal(d2.forecast!.expense, p.fixed + p.categories.get("var")!.p50);
+  // Il sabato la quota è più alta: con un obiettivo fisso, quota di sabato > quota di martedì.
+  const sat = "2026-11-14";
+  const { txns: t2 } = synthetic(plusDays(sat, 1));
+  const ds = buildD({ txns: t2, categories: cats, subcategories: [], budgets, month: "2026-11", today: sat });
+  const ps = predictMonth({ txns: t2, categories: cats, dashboard: ds, today: sat, savingsTarget: 50000, sims: 300 })!;
+  const pt = predictMonth({ txns, categories: cats, dashboard: d, today, savingsTarget: 50000, sims: 300 })!;
+  assert.ok(ps.quota!.weekdayFactor > 1.5 && ps.quota!.today > pt.quota!.today, "quota del sabato più alta");
+  assert.equal(ps.targetSource, "custom");
+});
+
+test("backtest: su dati regolari la previsione a metà mese sbaglia poco e copre il vero", () => {
+  const { cats, txns } = synthetic("2026-11-10");
+  const a = backtest(txns, cats, "2026-11", 4, 400);
+  assert.equal(a.months, 4);
+  assert.ok(a.error! < 0.05, `errore ${a.error}`);
+});
+
+test("positiveMessage: complimenti solo se probabili, serie di giorni", () => {
+  const base = { month: "2026-11", usualSavings: 40000, probAboveUsual: 0.8, savings: { p10: 42000, p50: 50000, p90: 58000 }, quota: { today: 1500, spentToday: 0, left: 30000, weekdayFactor: 1, vsPace: 4500, streak: 2 } };
+  const good = positiveMessage(base as never, "2026-11-12", 12)!;
+  assert.equal(good.key, "good:2026-11-09");
+  assert.match(good.body, /100\s€ più del solito/);
+  assert.equal(positiveMessage({ ...base, probAboveUsual: 0.6 } as never, "2026-11-12", 12), null, "non abbastanza sicuro");
+  assert.equal(positiveMessage(base as never, "2026-11-05", 5), null, "troppo presto nel mese");
+  const streak = positiveMessage({ ...base, quota: { ...base.quota, streak: 5 } } as never, "2026-11-12", 12)!;
+  assert.equal(streak.key, "streak:2026-11:5");
+});
+
+test("positiveMessage: niente complimenti se non registri da più di 2 giorni", () => {
+  const base = { month: "2026-11", usualSavings: 40000, probAboveUsual: 0.9, savings: { p10: 45000, p50: 50000, p90: 58000 }, quota: { today: 1500, spentToday: 0, left: 30000, weekdayFactor: 1, vsPace: 4500, streak: 5 } };
+  assert.equal(positiveMessage(base as never, "2026-11-12", 12, "2026-11-09"), null);
+  assert.equal(positiveMessage(base as never, "2026-11-12", 12, null), null);
+  assert.ok(positiveMessage(base as never, "2026-11-12", 12, "2026-11-11"));
+});
